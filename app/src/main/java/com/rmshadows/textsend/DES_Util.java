@@ -1,5 +1,8 @@
 package com.rmshadows.textsend;
 
+/**
+ * 未使用
+ */
 import android.util.Base64;
 
 import javax.crypto.Cipher;
