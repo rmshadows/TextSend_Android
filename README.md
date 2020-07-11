@@ -32,6 +32,10 @@
 
  ### 截屏
 
+ ![main](https://images.gitee.com/uploads/images/2020/0711/161025_b5b60a06_7423713.png "屏幕截图.png")
+
+ ![help](https://images.gitee.com/uploads/images/2020/0711/161055_15a001d5_7423713.png "屏幕截图.png")
+
  ![ss](https://images.gitee.com/uploads/images/2020/0711/160554_6d64861e_7423713.png "屏幕截图.png")
 
 
