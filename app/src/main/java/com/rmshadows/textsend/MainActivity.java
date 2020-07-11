@@ -27,6 +27,7 @@ import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.concurrent.TimeoutException;
 
+//Android 5.0+
 public class MainActivity extends AppCompatActivity {
 
     private Button back;
