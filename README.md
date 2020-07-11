@@ -4,7 +4,7 @@
 
  - 安卓版本：5.0+
 
- - 电脑服务端传送门：[Gitee](https://gitee.com/rmshadows/TextSend_Android)   [Github](https://github.com/rmshadows/TextSend_Android)
+ - 电脑服务端传送门：[Gitee](https://gitee.com/rmshadows/TextSend_Desktop)   [Github](https://github.com/rmshadows/TextSend_Desktop)
 
  ### 使用方法：
 
