@@ -27,7 +27,6 @@ import java.net.SocketTimeoutException;
 import java.net.UnknownHostException;
 import java.util.concurrent.TimeoutException;
 
-//Android 5.0+
 public class MainActivity extends AppCompatActivity {
 
     private Button back;
@@ -103,18 +102,21 @@ public class MainActivity extends AppCompatActivity {
                     new Thread(new Runnable() {
                         @Override
                         public void run() {
-                            String sendtext = toSend.getText().toString();
+                            String sendtext = "(i386@received):"+toSend.getText().toString();
+//                            System.out.println("==<<"+sendtext);
                             sendtext = AES_Util.encrypt("RmY@TextSend!",sendtext);
                             LASTEST = sendtext;
-                            if (sendtext.equals("")) {
+//                            System.out.println("==<<"+sendtext);
+//                            System.out.println("==<<Decode:"+AES_Util.decrypt("RmY@TextSend!",sendtext));
+                            if (sendtext.equals("(i386@received):")) {
                                 sendtext = "";
                                 return;
                             }
                             try {
                                 LASTEST = sendtext;
                                 connectThread.ops.write(sendtext.getBytes());
-//                                connectThread.ops.write(DES_Util.encrypt(sendtext.getBytes()));
-                                System.out.println("====>>>>Sended.");
+                                connectThread.ops.flush();
+                                System.out.println("====<<Sended.");
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
@@ -192,7 +194,7 @@ public class MainActivity extends AppCompatActivity {
 
                 ops = socket.getOutputStream();
                 while (true) {
-                    final byte[] buffer = new byte[512];
+                    final byte[] buffer = new byte[1024000];
                     ips = socket.getInputStream();
                     final int len = ips.read(buffer);
                     if (len != 0) {
@@ -200,10 +202,32 @@ public class MainActivity extends AppCompatActivity {
                             @Override
                             public void run() {
                                 String rec = new String(buffer,0,len);
-                                String Frec = AES_Util.decrypt("RmY@TextSend!",LASTEST).substring(0,1);
+                                String Frec = AES_Util.decrypt("RmY@TextSend!",LASTEST).substring(16,17);
                                 rec = AES_Util.decrypt("RmY@TextSend!",rec);
-                                System.out.println("====>>>>手机端收到消息:"+rec);
-                                if(rec.length()<16||!(rec.substring(0,16).equals("(i386@received):"))){
+                                System.out.println("<<>>手机端收到消息:"+rec);
+                                if(rec.equals("(i386@RETRY)")){
+                                    try {
+                                        ops.write(LASTEST.getBytes());
+                                        ops.flush();
+                                    } catch (IOException e) {
+                                        e.printStackTrace();
+                                    }
+                                }
+                                else if(rec.substring(0,16).equals("(i386@received):")){
+                                    if(rec.substring(16,17).equals(Frec)) {
+                                        System.out.println("==>>电脑端已收到.");
+                                        toSend.setText("");
+                                    }
+                                    else{
+                                        try {
+                                            ops.write(LASTEST.getBytes());
+                                        } catch (IOException e) {
+                                            e.printStackTrace();
+                                        }
+                                    }
+                                }
+                                else if (rec.substring(0,16).equals("(amd6@received):")){
+                                    rec = rec.substring(16);
                                     try{
                                         //获取剪贴板管理器：
                                         ClipboardManager cm = (ClipboardManager) getSystemService(Context.CLIPBOARD_SERVICE);
@@ -215,20 +239,10 @@ public class MainActivity extends AppCompatActivity {
                                         System.out.println(e.toString());
                                     }
                                 }
-                                else if(rec.equals("(i386@RETRY)")){
-                                    try {
-                                        ops.write(LASTEST.getBytes());
-                                    } catch (IOException e) {
-                                        e.printStackTrace();
-                                    }
-                                }
-                                else if(rec.substring(16,17).equals(Frec)){
-                                    System.out.println("电脑端已收到.");
-                                    toSend.setText("");
-                                }
                                 else{
                                     try {
                                         ops.write(LASTEST.getBytes());
+                                        ops.flush();
                                     } catch (IOException e) {
                                         e.printStackTrace();
                                     }
