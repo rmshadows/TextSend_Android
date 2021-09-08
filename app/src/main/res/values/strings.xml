@@ -1,23 +1,21 @@
 <resources>
     <string name="app_name">TextSend</string>
-    <string name="ip_beg">192.168.1</string>
-    <string name="title_activity_login">LoginActivity</string>
-    <string name="welcome">"Welcome !"</string>
-    <string name="connect">"连  接"</string>
-    <string name="port_hint">"端口号:不填默认54300"</string>
-    <string name="IP_hint">"电脑IP地址"</string>
-    <string name="login_text">"连接TextSend电脑端"</string>
-    <string name="help_text">"帮助"</string>
-    <string name="back_text">"返回"</string>
-    <string name="back2login">"重连"</string>
-    <string name="connect_failed">"连接失败"</string>
-    <string name="invalid_IP">"错误的IP地址"</string>
-    <string name="invalid_port">"端口错误"</string>
-    <string name="send_text">"发送"</string>
-    <string name="sent">"记录"</string>
-    <string name="input_text">"请在这里输入要发送到电脑的文字"</string>
-    <string name="help">"帮助\n-作者：Ryan\n-版本：2.1 2020-07\n-界面：Java Swing\n-系统：Linux、Android 5.0+
-        TextSend将帮助你更方便地在电脑和手机之间双向传输文字信息。\n\n一、首先，请保证手机和电脑在同一局域网内、电脑防火墙未屏蔽外来流量等防火墙配置。在IP方框输入电脑的IP地址。Port是端口，默认54300,可以不填。然后点击连接，连接成功会有提示。\n二、连接成功后，移动端发送的文字会自动输入到电脑（注意电脑界面焦点是否在输入框，如果没有，自己Ctrl+V粘贴一下）。Emoji表情的话，记得在前面随便加个标点符号再发送（e.g.：“。😂”）。\n\n-关于：本软件采用AES加密信息进行传输，算是相对安全了吧。本来想加入二维码扫一扫自动连接功能，可是实在有点没时间。需要的亲们自己改改。\n-警告：请在一个相对安全的局域网环境再使用本软件。原因如下：
-        1、结构简单，服务端端口没有鉴权。
-        2、未进行字符过滤。"</string>
+    <string name="action_mode">切换模式</string>
+    <string name="action_about">关于</string>
+    <string name="action_quit">退出</string>
+    <!-- Strings used for fragments for navigation -->
+    <string name="first_fragment_label">TextSend for Android</string>
+    <string name="second_fragment_label">Text Send - 已连接</string>
+    <string name="connect">连接</string>
+    <string name="send">发送</string>
+    <string name="start_server">START</string>
+
+    <string name="client_label">Connect to Text Send for Desktop</string>
+    <string name="hint_addr">电脑端的IP地址</string>
+    <string name="hint_port">默认端口54300</string>
+    <string name="hint_send">请在这里输入要发送的文字</string>
+    <string name="capture_fragment_label">扫一扫</string>
+
+    <string name="server_label">Text Send Server</string>
+    <string name="hint_server_port">Default server at port 54300</string>
 </resources>
