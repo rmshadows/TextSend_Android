@@ -51,9 +51,7 @@ public class CaptureFragment extends Fragment implements CameraScan.OnScanResult
     private CameraScan mCameraScan;
 
     public static CaptureFragment newInstance() {
-
         Bundle args = new Bundle();
-
         CaptureFragment fragment = new CaptureFragment();
         fragment.setArguments(args);
         return fragment;
@@ -61,15 +59,15 @@ public class CaptureFragment extends Fragment implements CameraScan.OnScanResult
 
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-        MainActivity.page_view_index = 3;
-        MainActivity.qr_coding_yet = true;
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        // 进入二维码扫描界面
+        MainActivity.pageViewIndex = 3;
+        MainActivity.qrCodingYet = true;
         int layoutId = getLayoutId();
         if(isContentView(layoutId)){
             mRootView = createRootView(inflater,container);
         }
         initUI();
-
         return mRootView;
     }
 
@@ -244,7 +242,7 @@ public class CaptureFragment extends Fragment implements CameraScan.OnScanResult
     @Override
     public boolean onScanResultCallback(Result result) {
         // 结果添加
-        MainActivity.client_qr_scan_result = result.toString();
+        MainActivity.clientQrScanResult = result.toString();
         // 返回
         NavHostFragment.findNavController(CaptureFragment.this)
                 .navigate(R.id.action_CaptureFragment_to_ClientConfigFragment);

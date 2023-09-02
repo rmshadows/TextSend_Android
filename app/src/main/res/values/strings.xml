@@ -3,6 +3,10 @@
     <string name="action_mode">切换模式</string>
     <string name="action_about">关于</string>
     <string name="action_quit">退出</string>
+    <!--    About   -->
+    <string name="app_full_name">Text Send for Android</string>
+    <string name="version">4.0.1</string>
+    <string name="author">Ryan Yim</string>
     <!-- Strings used for fragments for navigation -->
     <string name="first_fragment_label">TextSend for Android</string>
     <string name="second_fragment_label">Text Send - 已连接</string>

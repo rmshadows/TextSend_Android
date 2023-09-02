@@ -15,87 +15,68 @@ import androidx.navigation.fragment.NavHostFragment;
 import java.net.Socket;
 
 import cn.rmshadows.textsend.databinding.ClientConfigFragmentBinding;
-import utils.ClientMsgController;
+import utils.ClientMessageController;
 
 public class ClientFragment extends Fragment {
-
     private static Fragment fragment;
-    private static EditText et_ip_addr;
-    private static EditText et_port;
     private ClientConfigFragmentBinding binding;
 
     @Override
-    public View onCreateView(
-            LayoutInflater inflater, ViewGroup container,
-            Bundle savedInstanceState
-    ) {
-        MainActivity.page_view_index = 1;
-        Log.d("==>>APP_LOG<<==","Creating connection view.");
+    public View onCreateView(@NonNull LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        MainActivity.pageViewIndex = 1;
+        Log.d("==>>APP_LOG<<==", "Creating connection view.");
         binding = ClientConfigFragmentBinding.inflate(inflater, container, false);
-
         return binding.getRoot();
     }
 
     public void onViewCreated(@NonNull View view, Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
-
+        EditText editTextIp = binding.addrIn;
+        EditText editTextPort = binding.portIn;
         fragment = ClientFragment.this;
-        et_ip_addr = binding.addrIn;
-        et_port = binding.portIn;
-
-        // 如果刚刚使用过扫一扫
-        if(MainActivity.qr_coding_yet){
-            MainActivity.qr_coding_yet = false;
-            setTextSendDesktopAddr(MainActivity.client_qr_scan_result);
+        // 刚刚使用过扫一扫 则将扫描结果填上去
+        if (MainActivity.qrCodingYet) {
+            MainActivity.qrCodingYet = false;
+            setTextSendDesktopAddr(MainActivity.clientQrScanResult, editTextIp, editTextPort);
         }
-
-        binding.buttonConnect.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                // 连接
-                try{
+        // 连接按钮 连接
+        binding.buttonConnect.setOnClickListener(view1 -> {
+            // 连接
+            try {
 //                    Toast.makeText(MainActivity.m,"连接成功",Toast.LENGTH_SHORT).show();
-                    String client_addr = "";
-                    int client_port = 54300;
-                    client_addr = et_ip_addr.getText().toString();
-                    if(!et_port.getText().toString().equals("")){
-                        client_port = Integer.valueOf(et_port.getText().toString());
-                    }
-
-                    // 下面直接调用报错  android.os.NetworkOnMainThreadException
-//                    Thread c = new Thread(new ClientMsgController(client_addr, client_port));
-//                    c.start();
-
-                    // final引入线程
-                    String finalClient_addr = client_addr;
-                    int finalClient_port = client_port;
-
-                    new Thread(() -> {
-                        try {
-                            Socket socket = new Socket(finalClient_addr, finalClient_port);
-                            Log.d("==>>APP_LOG<<==", "连接地址："+finalClient_addr+":"+String.valueOf(finalClient_port));
-                            new Thread(new ClientMsgController(socket)).start();
-                            MainActivity.socket_of_client = socket;
-                        }catch (Exception e){
-                            MainActivity.showToast("连接失败", Toast.LENGTH_SHORT);
-                            e.printStackTrace();
-                        }
-                    }).start();
-
-                    NavHostFragment.findNavController(ClientFragment.this)
-                            .navigate(R.id.action_ClientConfigFragment_to_ClientMsgFragment);
-                }catch (Exception e){
-                    Log.d("==>>APP_LOG<<==","buttonConnect连接失败");
-                    MainActivity.is_client_connected = false;
-                    e.printStackTrace();
+                String clientAddr;
+                int clientPort = 54300;
+                clientAddr = editTextIp.getText().toString();
+                if (!editTextPort.getText().toString().equals("")) {
+                    clientPort = Integer.parseInt(editTextPort.getText().toString());
                 }
+                // final引入线程
+                String finalClientAddr = clientAddr;
+                int finalClientPort = clientPort;
+                new Thread(() -> {
+                    try {
+                        Socket socket = new Socket(finalClientAddr, finalClientPort);
+                        Log.d("==>>APP_LOG<<==", "连接地址：" + finalClientAddr + ":" + finalClientPort);
+                        new Thread(new ClientMessageController(socket)).start();
+                        MainActivity.clientSocket = socket;
+                    } catch (Exception e) {
+                        MainActivity.showToast("连接失败", Toast.LENGTH_SHORT);
+                        e.printStackTrace();
+                    }
+                }).start();
+                // 连接成功就跳转发送页面
+                NavHostFragment.findNavController(ClientFragment.this).navigate(R.id.action_ClientConfigFragment_to_ClientMsgFragment);
+            } catch (Exception e) {
+                Log.d("==>>APP_LOG<<==", "buttonConnect连接失败");
+                MainActivity.isClientConnected = false;
+                e.printStackTrace();
             }
         });
     }
 
     @Override
     public void onDestroyView() {
-        Log.d("==>>APP_LOG<<==","Exiting connection view.");
+        Log.d("==>>APP_LOG<<==", "Exiting connection view.");
         super.onDestroyView();
         binding = null;
     }
@@ -103,29 +84,28 @@ public class ClientFragment extends Fragment {
     /**
      * 跳转到二维码扫描界面
      */
-    public static void goScanQR(){
-        NavHostFragment.findNavController(fragment)
-                .navigate(R.id.action_ClientConfigFragment_to_CaptureFragment);
+    public static void goScanQR() {
+        NavHostFragment.findNavController(fragment).navigate(R.id.action_ClientConfigFragment_to_CaptureFragment);
     }
 
     /**
      * 跳转服务界面
      */
-    public static void goServer(){
-        NavHostFragment.findNavController(fragment)
-                .navigate(R.id.action_ClientConfigFragment_to_ServerFragment);
+    public static void goServer() {
+        NavHostFragment.findNavController(fragment).navigate(R.id.action_ClientConfigFragment_to_ServerFragment);
     }
 
     /**
      * 设置IP地址
+     *
      * @param ip_address IP地址和端口
      */
-    public static void setTextSendDesktopAddr(String ip_address){
-        try{
+    public static void setTextSendDesktopAddr(String ip_address, EditText editTextIp, EditText editTextPort) {
+        try {
             String[] ip = ip_address.split(":");
-            et_ip_addr.setText(ip[0]);
-            et_port.setText(ip[1]);
-        }catch (Exception e){
+            editTextIp.setText(ip[0]);
+            editTextPort.setText(ip[1]);
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }

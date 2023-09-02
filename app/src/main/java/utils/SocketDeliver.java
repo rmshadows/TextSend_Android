@@ -1,105 +1,135 @@
 package utils;
 
+import ScheduleTask.ScheduleTask;
+import cn.rmshadows.textsend.MainActivity;
+
 import java.io.IOException;
 import java.net.BindException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketException;
-import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-import cn.rmshadows.textsend.MainActivity;
-import cn.rmshadows.textsend.ServerQRFragment;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 启动一个服务器端口，监听。 分发Socket，仅保留一个链接
- * 
- * @author jessie
+ * 启动一个服务器端口，监听。 分发Socket
  *
+ * @author jessie
  */
 public class SocketDeliver implements Runnable {
-	public static List<Socket> socket_list = Collections.synchronizedList(new ArrayList<Socket>());
-	// 创建一个线程池
-	private ExecutorService executorService = Executors.newFixedThreadPool(10);
-	private static boolean started = false;
-	static ServerSocket server;
+    // Socket ID Mode
+    public static final List<ServerMessageController> socketList = Collections.synchronizedList(new LinkedList<>());
+    // 创建一个线程池
+    private final ExecutorService executorService = Executors.newFixedThreadPool(10);
 
-	/**
-	 * 停止分发socket，不会停止原有链接
-	 */
-	public static void stopSocketDeliver() {
-		if (started) {
-			try {
-				server.close();
-				for (Socket s : socket_list) {
-					try {
-						s.close();
-					}catch (Exception e) {
-						e.printStackTrace();
-					}
-				}
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
-	}
+    // 服务Socket
+    static ServerSocket server;
 
-	@Override
-	public void run() {
-		System.err.println("启动电脑端TextSend服务...");
-		try {
-			server = new ServerSocket(Integer.valueOf(MainActivity.server_port), 1);
-			started = true;
-			// 监听是否停止
-			new Thread(new Runnable() {
-				@Override
-				public void run() {
-					while (MainActivity.is_server_running) {
-						try {
-							Thread.sleep(1000);
-						} catch (InterruptedException e) {
-							e.printStackTrace();
-						}
-					}
-					stopSocketDeliver();
-				}
-			}).start();
-			// 分发socket
-			while (true) {
-				// 如果有链接，不继续分发
-				while (socket_list.size() >= 1) {
-					Thread.sleep(1000);
-				}
-				System.out.println("Socket分发中。。。");
-				final Socket socket = server.accept();
-				MainActivity.is_server_connected = true;
-				ServerQRFragment.goMsg();
-				socket_list.add(socket);
-				executorService.execute(new Thread(new ServerMsgController(socket, socket_list)));
-			}
-		} catch (BindException e) {
-			System.out.println("Port Already in use.");
-		} catch (SocketException e) {
-			System.out.println(e.toString());
-		} catch (Exception e) {
-			e.printStackTrace();
-		} finally {
-			System.out.println("Log: Socket Closing...");
-		}
-	}
+    // 控制定时器停止
+    public static AtomicBoolean scheduleControl = new AtomicBoolean(false);
+    // 控制Socket分发 true为允许分发 false 不允许分发，但保持现有连接
+    public static AtomicBoolean socketDeliveryControl = new AtomicBoolean(false);
 
-	public static void disconnect_all_client(){
-		for (Socket s : socket_list) {
-			try {
-				s.close();
-			}catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-		// ServerMsgController中148已经设置false了
-		MainActivity.is_server_connected = false;
-	}
+    /**
+     * 服务端会把消息广播给所有客户端
+     */
+    public static void sendMessageToAllClients(Message m) {
+        for (ServerMessageController s : SocketDeliver.socketList) {
+            new Thread(new ServerMessageTransmitter(s, m)).start();
+        }
+    }
+
+    /**
+     * 检测到服务端停止，从内部停止socket
+     */
+    public static void stopSocketDeliver() {
+        // 关闭服务端Socket
+        try {
+            server.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        // 关闭所有客户端Socket)(现有连接)
+        for (ServerMessageController s : socketList) {
+            try {
+                s.getSocket().close();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        // 二次赋值了
+        scheduleControl.set(false);
+        socketDeliveryControl.set(false);
+        System.err.println("Socket Server shutdown.");
+    }
+
+    @Override
+    public void run() {
+        System.err.println("启动电脑端Textsend服务...");
+        try {
+            /* backlog是ServerSocket类中的参数，用来指定ServerSocket中等待客户端连接队列的最大数量，并且每调用一次accept方法，就从等待队列中取一个客户端连接出来，因此队列又空闲出一个位置出来，这里有两点需要注意：
+                1、将等待队列设置得过大，容易造成内存溢出，因为所有的客户端连接都会堆积在等待队列中；
+                2、不断的调用accpet方法如果是长任务容易内存溢出，并且文件句柄数会被耗光。
+             */
+            server = new ServerSocket(MainActivity.getServerListenPort(), MainActivity.maxConnection);
+            // 监听服务是否停止
+            scheduleControl.set(true); // 开启定时器
+            new Thread(() -> {
+                Runnable Task = () -> {
+                    // 如果服务停止 Socket停止
+                    if (!MainActivity.isServerRunning()) {
+                        stopSocketDeliver();
+                        scheduleControl.set(false);
+                    }
+                };
+                new ScheduleTask(Task, 1, 1, scheduleControl, TimeUnit.SECONDS).startTask();
+            }).start();
+            // 控制Socket是否继续分发
+            socketDeliveryControl.set(true);
+            Runnable SocketDeliveryTask = () -> {
+                // 分发socket
+                if (socketList.size() < MainActivity.maxConnection) {
+                    final Socket socket;
+                    try {
+                        System.out.println("Socket is delivering......");
+                        socket = server.accept();
+                        ServerMessageController client = new ServerMessageController(socket);
+                        // 断开后删除列表的方法写在ServerMessageController
+                        socketList.add(client);
+                        // 启动定时任务 如果连接成功则取消运行 不成功就断开Socket
+                        Runnable connectTimeout = () -> {
+                            try {
+                                Thread.sleep(8000);
+                                if (client.getConnectionStat() != 2) {
+                                    client.closeCurrentClientSocket();
+                                    System.err.println("连接超时，断开客户端。");
+                                } else {
+                                    System.out.println("检测到客户端连接成功");
+                                }
+                            } catch (InterruptedException e) {
+                                throw new RuntimeException(e);
+                            }
+                        };
+                        new Thread(connectTimeout).start();
+                        executorService.execute(new Thread(client));
+                    } catch (IOException e) {
+                        socketDeliveryControl.set(false);
+                        throw new RuntimeException(e);
+                    }
+                }
+            };
+            new ScheduleTask(SocketDeliveryTask, 1, 1, socketDeliveryControl,
+                    500, 800, TimeUnit.SECONDS).startTask();
+        } catch (BindException e) {
+            MainActivity.stopServer();
+            System.out.println("Port Already in use.");
+        } catch (Exception e) {
+            MainActivity.stopServer();
+            e.printStackTrace();
+        }
+    }
 }
