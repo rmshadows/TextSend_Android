@@ -255,9 +255,9 @@ class ServerMessageReceiver implements Runnable {
                         GsonMessage cgm = MessageCrypto.gsonMessageDecrypt(egm);
                         if (serverMessageController.getConnectionStat() == 0) {
                             // 获取客户端支持的模式
-                            if (cgm != null && Objects.equals(cgm.id(), serverMessageController.getClientId())) {// 客户端发送的才接受
+                            if (cgm != null && Objects.equals(cgm.getId(), serverMessageController.getClientId())) {// 客户端发送的才接受
                                 // Notes: {"id":"553126963","data":"","notes":"SUPPORT-{"supportMode":[1]}"}
-                                String[] ts = cgm.notes().split("-");
+                                String[] ts = cgm.getNotes().split("-");
                                 // 如果是SUPPORT开头
                                 if (Objects.equals(ts[0], "SUPPORT")) {
                                     // 读取客户端发送的JSON {"supportMode":[1]}
@@ -285,14 +285,14 @@ class ServerMessageReceiver implements Runnable {
                         } else {
                             if (cgm != null) {
                                 // 客户端发送的才接受
-                                if (Objects.equals(cgm.id(), serverMessageController.getClientId())) {
-                                    if (cgm.notes().equals(ServerMessageController.FB_MSG)) {
+                                if (Objects.equals(cgm.getId(), serverMessageController.getClientId())) {
+                                    if (cgm.getNotes().equals(ServerMessageController.FB_MSG)) {
                                         // 处理反馈信息
                                         System.out.println("客户端收到了消息。");
                                         MainActivity.cleanTextArea();
                                     } else {
                                         StringBuilder text = new StringBuilder();
-                                        for (String c : cgm.data()) {
+                                        for (String c : cgm.getData()) {
                                             text.append(c);
                                         }
                                         // 反馈客户端 注意：仅代表服务端收到信息
@@ -322,15 +322,15 @@ class ServerMessageReceiver implements Runnable {
                     GsonMessage cgm = MessageCrypto.gsonMessageDecrypt((GsonMessage) objectInputStream.readObject());
                     if (cgm != null) {
                         // 判断客户端ID
-                        if (Objects.equals(cgm.id(), serverMessageController.getClientId())) {
+                        if (Objects.equals(cgm.getId(), serverMessageController.getClientId())) {
                             // 如果是客户端的反馈信息
-                            if (cgm.notes().equals(ServerMessageController.FB_MSG)) {
+                            if (cgm.getNotes().equals(ServerMessageController.FB_MSG)) {
                                 // 处理反馈信息
                                 System.out.println("客户端收到了消息。");
                                 MainActivity.cleanTextArea();
                             } else {
                                 StringBuilder text = new StringBuilder();
-                                for (String c : cgm.data()) {
+                                for (String c : cgm.getData()) {
                                     text.append(c);
                                 }
                                 // 反馈服务器

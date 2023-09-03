@@ -171,8 +171,8 @@ class ClientMessageReceiver implements Runnable {
                         if (getConnectionStat() == 0) {
                             // 获取ID
                             // 服务器发送的才接受
-                            if (cgm != null && Objects.equals(cgm.id(), ClientMessageController.SERVER_ID)) {
-                                ClientMessageController.clientId = cgm.notes();
+                            if (cgm != null && Objects.equals(cgm.getId(), ClientMessageController.SERVER_ID)) {
+                                ClientMessageController.clientId = cgm.getNotes();
                                 System.err.println("获取到服务器分配的ID：" + ClientMessageController.clientId);
                                 // 发送支持的模式 格式：SUPPORT-{"supportMode":[1]}
                                 String supportMode = "SUPPORT-" + ClientMessageController.SUPPORT_MODE;
@@ -186,10 +186,10 @@ class ClientMessageReceiver implements Runnable {
                             // 开始接受服务器发过来的传输模式
                             String[] tsp;
                             if (cgm != null) {
-                                tsp = cgm.notes().split("-");
+                                tsp = cgm.getNotes().split("-");
                                 // 服务器发送的才接受 {"id":"-200","data":"","notes":"CONFIRM-1"}
                                 // 判断服务器ID 且CONFIRM开头
-                                if (Objects.equals(cgm.id(), ClientMessageController.SERVER_ID) && Objects.equals(tsp[0], "CONFIRM")) {
+                                if (Objects.equals(cgm.getId(), ClientMessageController.SERVER_ID) && Objects.equals(tsp[0], "CONFIRM")) {
                                     ClientMessageController.transmissionModeSet = Integer.parseInt(tsp[1]);
                                     receiverTransmissionMode = ClientMessageController.transmissionModeSet;
                                     System.err.println("获取到服务器传输模式：" + ClientMessageController.transmissionModeSet);
@@ -204,14 +204,14 @@ class ClientMessageReceiver implements Runnable {
                         } else {
                             if (cgm != null) {
                                 // 服务器发送的才接受
-                                if (Objects.equals(cgm.id(), ClientMessageController.SERVER_ID)) {
-                                    if (cgm.notes().equals(ClientMessageController.FB_MSG)) {
+                                if (Objects.equals(cgm.getId(), ClientMessageController.SERVER_ID)) {
+                                    if (cgm.getNotes().equals(ClientMessageController.FB_MSG)) {
                                         // 处理反馈信息
                                         System.out.println("服务器收到了消息。");
                                         MainActivity.cleanTextArea();
                                     } else {
                                         StringBuilder text = new StringBuilder();
-                                        for (String c: cgm.data()) {
+                                        for (String c: cgm.getData()) {
                                             text.append(c);
                                         }
                                         // 反馈服务器 注意：仅代表客户端收到信息
@@ -240,15 +240,15 @@ class ClientMessageReceiver implements Runnable {
                     GsonMessage cgm = MessageCrypto.gsonMessageDecrypt((GsonMessage) objectInputStream.readObject());
                     if(cgm != null){
                         // 判断服务器ID
-                        if (Objects.equals(cgm.id(), ClientMessageController.SERVER_ID)) {
+                        if (Objects.equals(cgm.getId(), ClientMessageController.SERVER_ID)) {
                             // 如果是服务器的反馈信息
-                            if (cgm.notes().equals(ClientMessageController.FB_MSG)) {
+                            if (cgm.getNotes().equals(ClientMessageController.FB_MSG)) {
                                 // 处理反馈信息
                                 System.out.println("服务器收到了消息。");
                                 MainActivity.cleanTextArea();
                             } else {
                                 StringBuilder text = new StringBuilder();
-                                for (String c: cgm.data()) {
+                                for (String c: cgm.getData()) {
                                     text.append(c);
                                 }
                                 // 反馈服务器

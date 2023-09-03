@@ -32,11 +32,11 @@ public class GsonMessageTypeAdapter extends TypeAdapter<GsonMessage> {
         }
         jsonWriter.beginObject();
         // ID
-        writeString(jsonWriter, "id", gsonMessage.id());
+        writeString(jsonWriter, "id", gsonMessage.getId());
         // DATA
-        writeLinkedList(jsonWriter, gsonMessage.data());
+        writeLinkedList(jsonWriter, gsonMessage.getData());
         // NOTES
-        writeString(jsonWriter, "notes", gsonMessage.notes());
+        writeString(jsonWriter, "notes", gsonMessage.getNotes());
         jsonWriter.endObject();
         jsonWriter.close();
     }

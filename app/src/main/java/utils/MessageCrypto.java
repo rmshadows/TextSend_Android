@@ -1,10 +1,9 @@
 package utils;
 
-import java.util.LinkedList;
-
-import AES_Utils.AES_CFB;
 import RandomNumber.RandomNumber;
 import cn.rmshadows.textsend.MainActivity;
+
+import java.util.LinkedList;
 
 public class MessageCrypto {
     // 分隔符
@@ -16,7 +15,7 @@ public class MessageCrypto {
      * @param string 字符串
      */
     public static String tsEncryptString(String string) {
-        AES_CFB cfb = new AES_CFB(MainActivity.AES_TOKEN, "ES", 32);
+        AES_Utils.AES_CFB cfb = new AES_Utils.AES_CFB(MainActivity.AES_TOKEN, "ES", 32);
         return cfb.encrypt(string);
     }
 
@@ -37,10 +36,10 @@ public class MessageCrypto {
      */
     public static GsonMessage gsonMessageEncrypt(GsonMessage clearGsonMessage) {
         try {
-            String id = String.format("%s%s%s", clearGsonMessage.id(), MSG_SPLITOR, randomInt());
+            String id = String.format("%s%s%s", clearGsonMessage.getId(), MSG_SPLITOR, randomInt());
             id = tsEncryptString(id);
-            LinkedList<String> data = clearGsonMessage.data();
-            String notes = String.format("%s%s%s", clearGsonMessage.notes(), MSG_SPLITOR, randomInt());
+            LinkedList<String> data = clearGsonMessage.getData();
+            String notes = String.format("%s%s%s", clearGsonMessage.getNotes(), MSG_SPLITOR, randomInt());
             notes = tsEncryptString(notes);
             GsonMessage encryptedGm = new GsonMessage(id, data, notes);
             System.out.print(clearGsonMessage);
@@ -61,13 +60,13 @@ public class MessageCrypto {
      */
     public static GsonMessage gsonMessageDecrypt(GsonMessage encryptedGsonMessage) {
         try {
-            String id = tsDecryptString(encryptedGsonMessage.id()).split(MSG_SPLITOR)[0];
+            String id = tsDecryptString(encryptedGsonMessage.getId()).split(MSG_SPLITOR)[0];
             LinkedList<String> data = new LinkedList<>();
             // 解密Data
-            for (String es : encryptedGsonMessage.data()) {
+            for (String es : encryptedGsonMessage.getData()) {
                 data.add(tsDecryptString(es));
             }
-            String notes = tsDecryptString(encryptedGsonMessage.notes()).split(MSG_SPLITOR)[0];
+            String notes = tsDecryptString(encryptedGsonMessage.getNotes()).split(MSG_SPLITOR)[0];
             return new GsonMessage(id, data, notes);
         } catch (Exception e) {
             e.printStackTrace();
