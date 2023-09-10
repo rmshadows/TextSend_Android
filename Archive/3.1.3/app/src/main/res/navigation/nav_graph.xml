@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/ClientConfigFragment">
+
+    <fragment
+        android:id="@+id/ClientConfigFragment"
+        android:name="cn.rmshadows.textsend.ClientFragment"
+        android:label="@string/first_fragment_label"
+        tools:layout="@layout/client_config_fragment">
+
+        <action
+            android:id="@+id/action_ClientConfigFragment_to_ClientMsgFragment"
+            app:destination="@id/ClientMsgFragment" />
+        <action
+            android:id="@+id/action_ClientConfigFragment_to_CaptureFragment"
+            app:destination="@id/CaptureFragment" />
+        <action
+            android:id="@+id/action_ClientConfigFragment_to_ServerFragment"
+            app:destination="@id/ServerFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/ClientMsgFragment"
+        android:name="cn.rmshadows.textsend.ClientMsgFragment"
+        android:label="@string/second_fragment_label"
+        tools:layout="@layout/client_msg_fragment">
+
+        <action
+            android:id="@+id/action_ClientMsgFragment_to_ClientConfigFragment"
+            app:destination="@id/ClientConfigFragment" />
+        <action
+            android:id="@+id/action_ClientMsgFragment_to_ServerFragment"
+            app:destination="@id/ServerFragment" />
+        <action
+            android:id="@+id/action_ClientMsgFragment_to_ServerQRFragment"
+            app:destination="@id/ServerQRFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/CaptureFragment"
+        android:name="cn.rmshadows.textsend.CaptureFragment"
+        android:label="@string/capture_fragment_label"
+        tools:layout="@layout/capture_fragment">
+
+        <action
+            android:id="@+id/action_CaptureFragment_to_ClientConfigFragment"
+            app:destination="@id/ClientConfigFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/ServerFragment"
+        android:name="cn.rmshadows.textsend.ServerFragment"
+        android:label="@string/first_fragment_label"
+        tools:layout="@layout/server_config_fragment">
+
+        <action
+            android:id="@+id/action_ServerConfigFragment_to_ServerQRFragment"
+            app:destination="@id/ServerQRFragment" />
+        <action
+            android:id="@+id/action_ServerConfigFragment_to_ClientConfigFragment"
+            app:destination="@id/ClientConfigFragment" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/ServerQRFragment"
+        android:name="cn.rmshadows.textsend.ServerQRFragment"
+        android:label="@string/first_fragment_label"
+        tools:layout="@layout/server_qr_fragment">
+        <action
+            android:id="@+id/action_ServerQRFragment_to_ClientMsgFragment"
+            app:destination="@id/ClientMsgFragment" />
+        <action
+            android:id="@+id/action_ServerQRFragment_to_ServerFragment"
+            app:destination="@id/ServerFragment" />
+    </fragment>
+
+
+</navigation>

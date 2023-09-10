@@ -1,0 +1,21 @@
+<resources>
+    <string name="app_name">TextSend</string>
+    <string name="action_mode">切换模式</string>
+    <string name="action_about">关于</string>
+    <string name="action_quit">退出</string>
+    <!-- Strings used for fragments for navigation -->
+    <string name="first_fragment_label">TextSend for Android</string>
+    <string name="second_fragment_label">Text Send - 已连接</string>
+    <string name="connect">连接</string>
+    <string name="send">发送</string>
+    <string name="start_server">START</string>
+
+    <string name="client_label">Connect to Text Send for Desktop</string>
+    <string name="hint_addr">电脑端的IP地址</string>
+    <string name="hint_port">默认端口54300</string>
+    <string name="hint_send">请在这里输入要发送的文字</string>
+    <string name="capture_fragment_label">扫一扫</string>
+
+    <string name="server_label">Text Send Server</string>
+    <string name="hint_server_port">Default server at port 54300</string>
+</resources>
