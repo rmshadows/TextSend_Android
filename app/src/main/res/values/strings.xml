@@ -1,5 +1,9 @@
 <resources>
     <string name="app_name">Textsend</string>
+    <string name="app_name_full">Textsend for Android</string>
+    <string name="app_version">4.0.1</string>
+    <string name="app_Author">Ryan Yim</string>
+    <string name="app_License">GPLv3</string>
     <!--  菜单  -->
     <string name="action_switch">切换</string>
     <string name="action_switchToServer">切换服务端</string>
@@ -11,13 +15,33 @@
     <string name="server_fragment_label">Textsend Server</string>
     <string name="message_fragment_label">Textsend for Android</string>
     <string name="qrcode_fragment_label">Textsend QR Code</string>
+    <!--  客户端连接  -->
+    <string name="client_hint">Connect to Textsend for Desktop</string>
+    <string name="client_ip_addr_prefix">192.168.1.</string>
+    <string name="client_ip_addr_hint">IPv4地址</string>
+    <string name="client_port_hint">端口号</string>
+    <string name="client_port_default">54300</string>
+    <string name="client_connect_btn">连接</string>
+    <string name="content_description">扫描二维码</string>
 
-    <string name="next">Next</string>
-    <string name="previous">Previous</string>
+    <!--  消息发送  -->
+    <string name="messager_send_btn">发送</string>
+    <string name="messager_edittext_hint">文字输入框</string>
+    <string name="messager_label">Textsend for Android</string>
 
+    <!--  服务端  -->
+    <string name="server_switch_btn_one">切换单用户模式</string>
+    <string name="server_switch_btn_multi">切换多用户模式</string>
+    <string name="server_start_btn">启动服务</string>
+    <string name="server_stop_btn">停止服务</string>
+    <string name="server_content_description">二维码图片</string>
+
+
+    <!--  服务端端口号修改对话框  -->
+    <string name="server_input_listen_port">请输入监听端口号</string>
+
+    <!--  保留字段  -->
     <string name="lorem_ipsum">
         Lorem ipsum.
     </string>
-    <!-- TODO: Remove or change this placeholder text -->
-    <string name="hello_blank_fragment">Hello blank fragment</string>
 </resources>

@@ -14,6 +14,12 @@
         <action
             android:id="@+id/action_ClientFragment_to_ServerFragment"
             app:destination="@id/ServerFragment" />
+        <action
+            android:id="@+id/action_ClientFragment_to_messengerFragment"
+            app:destination="@id/messengerFragment" />
+        <action
+            android:id="@+id/action_ClientFragment_to_qrScannerFragment"
+            app:destination="@id/qrScannerFragment" />
     </fragment>
     <fragment
         android:id="@+id/ServerFragment"
@@ -23,6 +29,29 @@
 
         <action
             android:id="@+id/action_ServerFragment_to_ClientFragment"
+            app:destination="@id/ClientFragment" />
+        <action
+            android:id="@+id/action_ServerFragment_to_messengerFragment"
+            app:destination="@id/messengerFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/messengerFragment"
+        android:name="cn.rmshadows.textsend.fragments.MessengerFragment"
+        android:label="fragment_messenger"
+        tools:layout="@layout/fragment_messenger" >
+        <action
+            android:id="@+id/action_messengerFragment_to_ClientFragment"
+            app:destination="@id/ClientFragment" />
+        <action
+            android:id="@+id/action_messengerFragment_to_ServerFragment"
+            app:destination="@id/ServerFragment" />
+    </fragment>
+    <fragment
+        android:id="@+id/qrScannerFragment"
+        android:name="cn.rmshadows.textsend.fragments.QrScannerFragment"
+        android:label="QrScannerFragment" >
+        <action
+            android:id="@+id/action_qrScannerFragment_to_ClientFragment"
             app:destination="@id/ClientFragment" />
     </fragment>
 </navigation>
