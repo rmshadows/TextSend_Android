@@ -37,8 +37,8 @@
     <string name="server_content_description">二维码图片</string>
 
 
-    <!--  服务端端口号修改对话框  -->
-    <string name="server_input_listen_port">请输入监听端口号</string>
+    <!--  服务端信息输入对话框  -->
+    <string name="server_input_edittext">请输入...</string>
 
     <!--  保留字段  -->
     <string name="lorem_ipsum">

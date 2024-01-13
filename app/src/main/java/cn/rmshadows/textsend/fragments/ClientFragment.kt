@@ -8,19 +8,21 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.setFragmentResultListener
+import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
 import cn.rmshadows.textsend.MainActivity
 import cn.rmshadows.textsend.R
 import cn.rmshadows.textsend.databinding.FragmentClientBinding
+import cn.rmshadows.textsend.viewmodels.TextsendViewModel
 
 /**
  * A simple [Fragment] subclass as the default destination in the navigation.
  */
 class ClientFragment : Fragment() {
-
     private val TAG: String = MainActivity.TAG
     private var _binding: FragmentClientBinding? = null
     private var toast: Toast? = null
+    private lateinit var viewModel: TextsendViewModel
 
     // This property is only valid between onCreateView and
     // onDestroyView.
@@ -54,16 +56,16 @@ class ClientFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentClientBinding.inflate(inflater, container, false)
+        viewModel = ViewModelProvider(this).get(TextsendViewModel::class.java)
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         // 更改状态
-        MainActivity.isServerMode = false
+        viewModel.isServerMode.value = false
         // 客户端连接
         binding.buttonConnect.setOnClickListener {
-
             findNavController().navigate(R.id.action_ClientFragment_to_ServerFragment)
         }
 

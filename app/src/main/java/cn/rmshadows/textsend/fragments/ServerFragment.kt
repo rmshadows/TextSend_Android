@@ -8,10 +8,16 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.fragment.app.Fragment
-import cn.rmshadows.textsend.InputDialogFragment
-import cn.rmshadows.textsend.MainActivity
+import androidx.fragment.app.viewModels
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import cn.rmshadows.textsend.R
 import cn.rmshadows.textsend.databinding.FragmentServerBinding
+import cn.rmshadows.textsend.viewmodels.TextsendViewModel
+import cn.rmshadows.textsend.viewmodels.ServerFragmentViewModel
+import kotlinx.coroutines.launch
 
 
 /**
@@ -23,20 +29,72 @@ class ServerFragment : Fragment() {
     // This property is only valid between onCreateView and
     // onDestroyView.
     private val binding get() = _binding!!
+    private lateinit var tsviewModel: TextsendViewModel
+    private lateinit var viewModel: ServerFragment
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        MainActivity.isServerMode = true
+        val tsviewModel: TextsendViewModel by viewModels()
+        val viewModel: ServerFragmentViewModel by viewModels()
+
+        tsviewModel.update(true, null, null, null)
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect {
+                    // Update UI elements
+                    if (it.maxConnection == 1) {
+                        binding.multiClientBtn.setText(R.string.server_switch_btn_multi)
+                    } else {
+                        binding.multiClientBtn.setText(R.string.server_switch_btn_one)
+                    }
+                    viewModel.getDeviceIP()
+                }
+            }
+        }
+
+
+//        viewModel = ViewModelProvider(this).get(TextsendViewModel::class.java)
+//        viewLifecycleOwner.lifecycleScope.launch {
+//            viewLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+//
+//
+//            }
+//        }
+
+        // Livedata DEBUG
+//        // 初始化按钮
+//        viewModel.serverRunning.observe(viewLifecycleOwner,  { i ->
+//            if (i) {
+//                binding.serverStartBtn.setText(R.string.server_stop_btn)
+//            } else {
+//                binding.serverStartBtn.setText(R.string.server_start_btn)
+//            }
+//        })
+//
+//        // 初始化按钮
+//        viewModel.maxConnection.observe(viewLifecycleOwner) { i ->
+//            if (i == 1) {
+//                binding.multiClientBtn.setText(R.string.server_switch_btn_multi)
+//            } else {
+//                binding.multiClientBtn.setText(R.string.server_switch_btn_one)
+//            }
+//        }
+//
+//        // 初始化端口号
+//        viewModel.serverListenPort.observe(viewLifecycleOwner) { i ->
+//            binding.showPortTextView.text = i
+//        }
+
         _binding = FragmentServerBinding.inflate(inflater, container, false)
         // 获取IP
-        MainActivity.preferIpAddr = MainActivity.getIP()
-        val adapter: ArrayAdapter<String> = ArrayAdapter<String>(this.requireContext(), android.R.layout.simple_spinner_item, MainActivity.netIps)
+
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         binding.ipPortSpinner.adapter = adapter
         // 默认IP
-        binding.ipPortSpinner.setSelection(MainActivity.netIps.indexOf(MainActivity.preferIpAddr))
+        binding.ipPortSpinner.setSelection(viewModel.netIps.indexOf(viewModel.preferIpAddr.value))
         // 下拉框选择IP
         binding.ipPortSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View, pos: Int, id: Long) {
@@ -45,11 +103,18 @@ class ServerFragment : Fragment() {
                     "你点击的是:" + pos + parent.getItemAtPosition(pos).toString(),
                     Toast.LENGTH_SHORT
                 ).show()
-                if(parent.getItemAtPosition(pos).toString().equals(MainActivity.CUSTOM_INPUT_FLAG)){
-                    // TODO: 后面要分开写！
-                    InputDialogFragment().show(childFragmentManager, "InputDialog")
-                }else{
-                    MainActivity.preferIpAddr = parent.getItemAtPosition(pos).toString()
+                if (parent.getItemAtPosition(pos).toString().equals(viewModel.CUSTOM_INPUT_FLAG)) {
+                    // 自定义修改IP
+//                    viewModel.isDialogFragmentAtomClose.set(false)
+                    InputIpAddressDialogFragment().show(
+                        childFragmentManager,
+                        InputIpAddressDialogFragment.TAG
+                    )
+                    val run: Runnable = Runnable { }
+                    // 等待对话框关闭
+//                    val scheduleTask = ScheduleTask()
+                } else {
+//                    viewModel.preferIpAddr.value = parent.getItemAtPosition(pos).toString()
                 }
             }
 
@@ -57,20 +122,6 @@ class ServerFragment : Fragment() {
                 // Another interface callback
             }
         }
-
-        // 初始化按钮状态
-        if (MainActivity.serverRunning) {
-            binding.serverStartBtn.setText(R.string.server_stop_btn)
-        } else {
-            binding.serverStartBtn.setText(R.string.server_start_btn)
-        }
-        if (MainActivity.maxConnection == 1) {
-            binding.multiClientBtn.setText(R.string.server_switch_btn_multi)
-        } else {
-            binding.multiClientBtn.setText(R.string.server_switch_btn_one)
-        }
-        // 初始化端口号
-        binding.showPortTextView.text = MainActivity.serverListenPort
         return binding.root
     }
 
@@ -79,37 +130,74 @@ class ServerFragment : Fragment() {
 
         // 用户模式切换
         binding.multiClientBtn.setOnClickListener {
-            if (MainActivity.maxConnection == 1) {
+            if ( == 1) {
                 // 多用户模式最多支持7人
-                MainActivity.maxConnection = 7
+                viewModel.maxConnection.value = 7
                 binding.multiClientBtn.setText(R.string.server_switch_btn_one)
             } else {
                 // 返回单用户模式
-                MainActivity.maxConnection = 1
+                viewModel.maxConnection.value = 1
                 binding.multiClientBtn.setText(R.string.server_switch_btn_multi)
             }
         }
 
-        binding.serverStartBtn.setOnClickListener {
-            if (MainActivity.serverRunning) {
-                binding.serverStartBtn.setText(R.string.server_stop_btn)
-            } else {
-                binding.serverStartBtn.setText(R.string.server_start_btn)
-                // 启动服务
-            }
-        }
+//        // 用户模式切换
+//        binding.multiClientBtn.setOnClickListener {
+//            if (viewModel.maxConnection.value == 1) {
+//                // 多用户模式最多支持7人
+//                viewModel.maxConnection.value = 7
+//                binding.multiClientBtn.setText(R.string.server_switch_btn_one)
+//            } else {
+//                // 返回单用户模式
+//                viewModel.maxConnection.value = 1
+//                binding.multiClientBtn.setText(R.string.server_switch_btn_multi)
+//            }
+//        }
 
-        binding.serverStartBtn.setOnLongClickListener{
+//        binding.serverStartBtn.setOnClickListener {
+//            if (viewModel.serverRunning.value == true) {
+//                binding.serverStartBtn.setText(R.string.server_stop_btn)
+//            } else {
+//                binding.serverStartBtn.setText(R.string.server_start_btn)
+//                // 启动服务
+//            }
+//        }
+
+        binding.serverStartBtn.setOnLongClickListener {
             // 长按修改端口号
-            InputDialogFragment().show(childFragmentManager, "InputDialog")
+            InputPortNumberDialogFragment().show(
+                childFragmentManager,
+                InputPortNumberDialogFragment.TAG
+            )
+            // 更新端口号
+            binding.showPortTextView.setText(viewModel.serverListenPort.value)
             true
         }
+    }
+
+    fun getAtapter(){
+        val adapter: ArrayAdapter<String> = ArrayAdapter<String>(
+            this.requireContext(),
+            android.R.layout.simple_spinner_item,
+            lifecycleScope.launch {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    viewModel.uiState.collect {
+                        // Update UI elements
+                        if (it.maxConnection == 1) {
+                            binding.multiClientBtn.setText(R.string.server_switch_btn_multi)
+                        } else {
+                            binding.multiClientBtn.setText(R.string.server_switch_btn_one)
+                        }
+                        viewModel.getDeviceIP()
+                    }
+                }
+            }
+        )
     }
 
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
     }
-
 
 }
