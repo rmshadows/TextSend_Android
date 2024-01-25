@@ -19,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class SocketDeliver(val listenPort:String,val maxConnection:String) : Runnable {
     // 创建一个线程池
     private val executorService = Executors.newFixedThreadPool(10)
+    
 
     override fun run() {
         System.err.println("启动移动端Textsend服务...")
