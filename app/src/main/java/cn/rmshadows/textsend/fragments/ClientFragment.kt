@@ -77,7 +77,7 @@ class ClientFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         // 更改状态
-        tsviewModel.update(1, false,null,null)
+        tsviewModel.update(1, false,null,null, null, null, null)
 
         // 客户端连接
         binding.buttonConnect.setOnClickListener {

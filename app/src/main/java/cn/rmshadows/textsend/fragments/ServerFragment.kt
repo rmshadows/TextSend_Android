@@ -44,11 +44,11 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         oips.removeLast() // 去除最后一个
         oips.add(input) // 添加新的IP
         oips.add(viewModel.CUSTOM_INPUT_FLAG) // 添加自定义条目
-        viewModel.update(input, null, oips, null, null) // 更新下拉框列表
+        viewModel.update(input, null, oips, null, null, null) // 更新下拉框列表
     }
 
     override fun onInputPortReceived(input: String) {
-        viewModel.update(null, input, null, null, null)
+        viewModel.update(null, input, null, null, null, null)
     }
 
     override fun onCreateView(
@@ -57,7 +57,7 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
     ): View {
         _binding = FragmentServerBinding.inflate(inflater, container, false)
         // 更新ui状态
-        tsviewModel.update(2 ,true, null, null)
+        tsviewModel.update(2 ,true, null, null, null, null, null)
         viewModel = ViewModelProvider(this).get(ServerFragmentViewModel::class.java)
         // 更新IP
         viewModel.getDeviceIP()
@@ -112,7 +112,7 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                     val sip = parent.getItemAtPosition(pos).toString()
                     // 会调用两次，所以判断一下有没有变化
                     if (viewModel.uiState.value.preferIpAddr != sip) {
-                        viewModel.update(sip, null, null, null, null)
+                        viewModel.update(sip, null, null, null, null, null)
                     }
                 }
             }
@@ -129,14 +129,18 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
 
         // 用户模式切换
         binding.multiClientBtn.setOnClickListener {
-            if (viewModel.uiState.value.maxConnection == 1) {
-                // 多用户模式最多支持7人
-                viewModel.update(null, null, null, null, 7)
-                binding.multiClientBtn.setText(R.string.server_switch_btn_one)
-            } else {
-                // 返回单用户模式
-                viewModel.update(null, null, null, null, 1)
-                binding.multiClientBtn.setText(R.string.server_switch_btn_multi)
+            if(viewModel.uiState.value.serverRunning){
+                // TODO: 前往消息界面
+            }else{
+                if (viewModel.uiState.value.maxConnection == 1) {
+                    // 多用户模式最多支持7人
+                    viewModel.update(null, null, null, null, 7, null)
+                    binding.multiClientBtn.setText(R.string.server_switch_btn_one)
+                } else {
+                    // 返回单用户模式
+                    viewModel.update(null, null, null, null, 1, null)
+                    binding.multiClientBtn.setText(R.string.server_switch_btn_multi)
+                }
             }
         }
 

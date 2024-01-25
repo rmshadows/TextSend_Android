@@ -16,8 +16,13 @@ data class TextsendState(
     val isServerMode: Boolean = true,
     // 客户端是否连接(服务端共用)
     val isClientConnected: Boolean = false,
-    // dialog fragment flag
-    val isDialogFragmentAtomClose: AtomicBoolean = AtomicBoolean(true)
+    // atom flag
+    val atomFlagA: AtomicBoolean = AtomicBoolean(true),
+    val atomFlagB: AtomicBoolean = AtomicBoolean(true),
+    // 文本框信息
+    val messageContent: String = "",
+    // 连接状态 -1:初始化 0:连接成功准备接受ID 1:ID接受成功，准备接受模式（已经将支持的模式发出）2:收到服务器返回的模式 进入正常通信
+    val connectionStat:Number = -1
 )
 
 
@@ -31,7 +36,7 @@ class TextsendViewModel : ViewModel() {
     val uiState: StateFlow<TextsendState> = _uiState.asStateFlow()
 
     fun cleanEditText() {
-
+        update(null, null, null, null, null, "", null)
     }
 
     // 计时器停止信号
@@ -43,15 +48,20 @@ class TextsendViewModel : ViewModel() {
         uiIndexVal: Number?,
         isServerModeVal: Boolean?,
         isClientConnectedVal: Boolean?,
-        isDialogFragmentAtomCloseVal: AtomicBoolean?
+        atomFlagAVal: AtomicBoolean?,
+        atomFlagBVal: AtomicBoolean?,
+        messageContentVal: String?,
+        connectionStatVal: Number?
     ) {
         _uiState.update { currentState ->
             currentState.copy(
                 uiIndex = uiIndexVal ?: currentState.uiIndex,
                 isServerMode = isServerModeVal ?: currentState.isServerMode,
                 isClientConnected = isClientConnectedVal ?: currentState.isClientConnected,
-                isDialogFragmentAtomClose = isDialogFragmentAtomCloseVal
-                    ?: currentState.isDialogFragmentAtomClose
+                atomFlagA = atomFlagAVal?:currentState.atomFlagA,
+                atomFlagB = atomFlagBVal?:currentState.atomFlagB,
+                messageContent = messageContentVal?:currentState.messageContent,
+                connectionStat = connectionStatVal?:currentState.connectionStat
             )
         }
     }

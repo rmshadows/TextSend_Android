@@ -24,9 +24,9 @@
 //    }
 //
 //    companion object {
-//        val FB_MSG: String = MainActivity.FB_MSG
-//        val MSG_LEN: Int = MainActivity.MSG_LEN
-//        val SERVER_ID: String = MainActivity.SERVER_ID
+//        val FB_MSG: String = Constant.FB_MSG
+//        val MSG_LEN: Int = Constant.MSG_LEN
+//        val SERVER_ID: String = Constant.SERVER_ID
 //
 //        // 支持1 JSON(文本) 2 Object(直接传输GsonMessage)  SUPPORT-{"supportMode":[1, 2]}
 //        const val SUPPORT_MODE = "{\"supportMode\":[1, 2]}"

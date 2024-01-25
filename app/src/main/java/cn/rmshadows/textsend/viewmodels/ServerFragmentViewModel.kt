@@ -24,7 +24,9 @@ data class ServerState(
     // 服务端服务是否正在运行
     val serverRunning: Boolean = false,
     // 客户端最大链接数量
-    val maxConnection: Number = 1
+    val maxConnection: Number = 1,
+    // 已连接用户数
+    val clientCount:Number = 0
 )
 
 
@@ -44,7 +46,8 @@ class ServerFragmentViewModel : ViewModel() {
         serverListenPortVal: String?,
         netIpsVal: LinkedList<String>?,
         serverRunningVal: Boolean?,
-        maxConnectionVal: Number?
+        maxConnectionVal: Number?,
+        clientCountVal:Number?
     ) {
         _uiState.update { currentState ->
             Log.d(TAG, "sfupdate: ${preferIpAddrVal}, ${serverListenPortVal}, ${netIpsVal}" +
@@ -54,7 +57,8 @@ class ServerFragmentViewModel : ViewModel() {
                 serverListenPort = serverListenPortVal ?: currentState.serverListenPort,
                 netIps = netIpsVal ?: currentState.netIps,
                 serverRunning = serverRunningVal ?: currentState.serverRunning,
-                maxConnection = maxConnectionVal ?: currentState.maxConnection
+                maxConnection = maxConnectionVal ?: currentState.maxConnection,
+                clientCount = clientCountVal ?:currentState.clientCount
             )
         }
     }
@@ -116,6 +120,6 @@ class ServerFragmentViewModel : ViewModel() {
             }
         }
 //        return prefer_ip
-        update(prefer_ip, null, ip_addr, null, null)
+        update(prefer_ip, null, ip_addr, null, null, null)
     }
 }

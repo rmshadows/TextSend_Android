@@ -1,5 +1,7 @@
 package utils
 
+import cn.rmshadows.textsend.viewmodels.ServerFragmentViewModel
+import cn.rmshadows.textsend.viewmodels.TextsendViewModel
 import com.google.gson.Gson
 import com.google.gson.JsonParser
 import utils.GMToolsUtil.JSONtoGsonMessage
@@ -21,7 +23,9 @@ import java.util.stream.Stream
  * 此类仅对应一个连接！
  */
 class ServerMessageController( // 实例私有属性
-    var socket: Socket
+    var socket: Socket,
+    val tsviewModel: TextsendViewModel,
+    val viewModel: ServerFragmentViewModel
 ) : Runnable {
     var transmissionModeSet = -1
     var clientId: String
@@ -72,7 +76,7 @@ class ServerMessageController( // 实例私有属性
     // 构造方法
     init {
         // 客户端IP
-        clientIP = socket.inetAddress.hostAddress
+        clientIP = socket.inetAddress.hostAddress as String
         // 生成客户端ID
         clientId = socket.hashCode().toString()
         // 状态设为连接 分配ID等事情是打开消息监听后的事
@@ -89,7 +93,7 @@ class ServerMessageController( // 实例私有属性
 
     override fun run() {
         // 启动监听器
-        val receiver = Thread(ServerMessageReceiver(this))
+        val receiver = Thread(ServerMessageReceiver(this, tsviewModel, viewModel))
         receiver.start()
         // 发送客户端ID给客户端
         println("ID -> " + clientIP + "(" + clientId + ")")
@@ -110,9 +114,9 @@ class ServerMessageController( // 实例私有属性
     }
 
     companion object {
-        val FB_MSG: String = TextSendMain.FB_MSG
-        val MSG_LEN: Int = TextSendMain.MSG_LEN
-        val SERVER_ID: String = TextSendMain.SERVER_ID
+        val FB_MSG: String = Constant.FB_MSG
+        val MSG_LEN: Int = Constant.MSG_LEN
+        val SERVER_ID: String = Constant.SERVER_ID
     }
 }
 
@@ -195,7 +199,11 @@ internal class ServerMessageTransmitter(
  *
  * @author jessie
  */
-internal class ServerMessageReceiver(private val serverMessageController: ServerMessageController) :
+internal class ServerMessageReceiver(
+    private val serverMessageController: ServerMessageController,
+    val tsviewModel: TextsendViewModel,
+    val viewModel: ServerFragmentViewModel
+) :
     Runnable {
     private var objectInputStream: ObjectInputStream? = null
     private var bufferedInputStream: BufferedInputStream? = null
@@ -229,10 +237,11 @@ internal class ServerMessageReceiver(private val serverMessageController: Server
                 var chunk = StringBuilder()
                 while (bufferedInputStream!!.read(readBuf).also { readLength = it } != -1) {
                     // 如果服务停止
-                    if (serverMessageController.connectionStat == -2 && !TextSendMain.isServerRunning()) {
+                    if (serverMessageController.connectionStat == -2 && !viewModel.uiState.value.serverRunning) {
                         break
                     }
-                    val read = kotlin.String(readBuf, 0, readLength, StandardCharsets.UTF_8)
+//                    val read = kotlin.String(readBuf, 0, readLength, StandardCharsets.UTF_8)
+                    val read: String = String(readBuf, 0, readLength, Charsets.UTF_8)
                     chunk.append(read)
                     // 读取到JSON末尾
                     if (read.endsWith("}")) {
@@ -263,9 +272,9 @@ internal class ServerMessageReceiver(private val serverMessageController: Server
                                     // 发送决定后的传输模式
                                     serverMessageController.sendMessage(
                                         Message(
-                                            TextSendMain.SERVER_ID,
+                                            Constant.SERVER_ID,
                                             null,
-                                            TextSendMain.MSG_LEN,
+                                            Constant.MSG_LEN,
                                             allocationMode
                                         )
                                     )
@@ -289,7 +298,7 @@ internal class ServerMessageReceiver(private val serverMessageController: Server
                                     if (cgm.notes == ServerMessageController.FB_MSG) {
                                         // 处理反馈信息
                                         println("客户端收到了消息。")
-                                        TextSendMain.cleanTextArea()
+                                        tsviewModel.cleanEditText()
                                     } else {
                                         val text = StringBuilder()
                                         for (c: String? in cgm.data!!) {
@@ -302,7 +311,6 @@ internal class ServerMessageReceiver(private val serverMessageController: Server
                                                     + "(" + serverMessageController.clientId + ") <- " + text
                                         )
                                         copyToClickboard(text.toString())
-                                        pasteReceivedMessage()
                                     }
                                 } else {
                                     // 丢弃的常规通讯信息
@@ -315,12 +323,12 @@ internal class ServerMessageReceiver(private val serverMessageController: Server
                     }
                 }
                 println("Socket has ended.")
-                ClientMessageController.connectionStat = -1
-                TextSendMain.isClientConnected = false
+                serverMessageController.connectionStat = -2
+                tsviewModel.update(null, null, false, null, null, null, null)
             } else if (receiverTransmissionMode == 2) {
                 // 传输对象 传输对象的时候已经进入正常通信了
                 // -2 表示连接断开了 只有服务在运行、客户端没断开才会继续监听
-                while (serverMessageController.connectionStat != -2 && TextSendMain.isServerRunning()) {
+                while (serverMessageController.connectionStat != -2 && viewModel.uiState.value.serverRunning) {
                     // 断开操作在TextSendMain中实现 这里已经解密成明文GM了
                     val cgm = gsonMessageDecrypt((objectInputStream!!.readObject() as GsonMessage))
                     if (cgm != null) {
@@ -330,7 +338,7 @@ internal class ServerMessageReceiver(private val serverMessageController: Server
                             if ((cgm.notes == ServerMessageController.FB_MSG)) {
                                 // 处理反馈信息
                                 println("客户端收到了消息。")
-                                TextSendMain.cleanTextArea()
+                                tsviewModel.cleanEditText()
                             } else {
                                 val text = StringBuilder()
                                 for (c: String? in cgm.data!!) {
@@ -343,7 +351,6 @@ internal class ServerMessageReceiver(private val serverMessageController: Server
                                             + "(" + serverMessageController.clientId + ") <- " + text)
                                 )
                                 copyToClickboard(text.toString())
-                                pasteReceivedMessage()
                             }
                         }
                     }
@@ -358,7 +365,7 @@ internal class ServerMessageReceiver(private val serverMessageController: Server
             serverMessageController.connectionStat = -2
         } finally {
             // 状态为-2 且服务端停止运行
-            if (serverMessageController.connectionStat == -2 && !TextSendMain.isServerRunning()) {
+            if (serverMessageController.connectionStat == -2 && !viewModel.uiState.value.serverRunning) {
                 serverMessageController.closeCurrentClientSocket()
             }
         }
@@ -403,27 +410,6 @@ internal class ServerMessageReceiver(private val serverMessageController: Server
         }
     }
 
-    /**
-     * 模拟键盘-粘贴 粘贴收到的文字
-     */
-    private fun pasteReceivedMessage() {
-        try {
-            val robot: java.awt.Robot = java.awt.Robot()
-            robot.delay(400)
-            robot.keyPress(java.awt.event.KeyEvent.VK_CONTROL)
-            robot.delay(100)
-            robot.keyPress(java.awt.event.KeyEvent.VK_V)
-            robot.delay(100)
-            robot.keyRelease(java.awt.event.KeyEvent.VK_CONTROL)
-            robot.delay(100)
-            robot.keyRelease(java.awt.event.KeyEvent.VK_V)
-            robot.delay(100)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            println("ROBOT ERROR")
-        }
-    }
-
     companion object {
         /**
          * 复制收到的消息到剪贴板
@@ -431,30 +417,7 @@ internal class ServerMessageReceiver(private val serverMessageController: Server
          * @param text 消息
          */
         private fun copyToClickboard(text: String) {
-            var ret = ""
-            val sysClip: java.awt.datatransfer.Clipboard =
-                java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
-            // 获取剪切板中的内容
-            val clipTf: java.awt.datatransfer.Transferable = sysClip.getContents(null)
-            if (clipTf != null) {
-                // 检查内容是否是文本类型
-                if (clipTf.isDataFlavorSupported(java.awt.datatransfer.DataFlavor.stringFlavor)) {
-                    try {
-                        ret = clipTf.getTransferData(java.awt.datatransfer.DataFlavor.stringFlavor)
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                    }
-                }
-            }
-            if (ret != text) {
-                val clipboard: java.awt.datatransfer.Clipboard =
-                    java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
-                // 封装文本内容
-                val trans: java.awt.datatransfer.Transferable =
-                    java.awt.datatransfer.StringSelection(text)
-                // 把文本内容设置到系统剪贴板
-                clipboard.setContents(trans, null)
-            }
+            // TODO
             println("已复制到剪辑板。")
         }
     }

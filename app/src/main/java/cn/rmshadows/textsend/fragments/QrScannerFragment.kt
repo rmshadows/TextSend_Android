@@ -24,7 +24,7 @@ class QrScannerFragment : BarcodeCameraScanFragment() {
      */
     override fun initCameraScan(cameraScan: CameraScan<Result?>) {
         super.initCameraScan(cameraScan)
-        tsviewModel.update(-1 ,null, null, null)
+        tsviewModel.update(-1 ,null, null, null, null, null, null)
         // 根据需要设置CameraScan相关配置
         cameraScan.setPlayBeep(true)
     }

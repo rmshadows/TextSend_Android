@@ -46,7 +46,7 @@ class MessengerFragment : Fragment() {
 
     override fun onDestroyView() {
         // 服务端、客户端的统称
-        tsviewModel.update(3, null, false, null)
+        tsviewModel.update(3, null, false, null, null, null, null)
         super.onDestroyView()
         _binding = null
     }
