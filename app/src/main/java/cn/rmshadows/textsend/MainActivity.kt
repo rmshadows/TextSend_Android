@@ -5,26 +5,29 @@ import android.view.Menu
 import android.view.MenuItem
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.findNavController
 import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.navigateUp
 import androidx.navigation.ui.setupActionBarWithNavController
 import cn.rmshadows.textsend.databinding.ActivityMainBinding
+import cn.rmshadows.textsend.viewmodels.ServerFragmentViewModel
 import cn.rmshadows.textsend.viewmodels.TextsendViewModel
+import kotlinx.coroutines.launch
+import utils.Constant
 import java.net.Socket
 import kotlin.system.exitProcess
 
 
 class MainActivity : AppCompatActivity() {
-    companion object {
-        // TAG
-        val TAG: String = "==>>APP DEBUG<<=="
-    }
-
+    val TAG = Constant.TAG
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: TextsendViewModel
+    private lateinit var sfviewModel: ServerFragmentViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,8 +37,9 @@ class MainActivity : AppCompatActivity() {
         val navController = findNavController(R.id.nav_host_fragment_content_main)
         appBarConfiguration = AppBarConfiguration(navController.graph)
         setupActionBarWithNavController(navController, appBarConfiguration)
-        viewModel = ViewModelProvider(this).get(TextsendViewModel::class.java)
 
+        viewModel = ViewModelProvider(this).get(TextsendViewModel::class.java)
+        sfviewModel = ViewModelProvider(this).get(ServerFragmentViewModel::class.java)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -54,16 +58,17 @@ class MainActivity : AppCompatActivity() {
                 // https://stackoverflow.com/questions/58686104/why-does-my-navcontroller-cannot-find-an-id-that-i-already-have
                 // 必须有上面这一句
                 val navController = findNavController(R.id.nav_host_fragment_content_main)
-                if(viewModel.isServerMode.value == true){
+                if (viewModel.uiState.value.isServerMode) {
                     // 如果已经连接会断开
-                    if(viewModel.serverRunning.value == true){
+                    if (sfviewModel.uiState.value.serverRunning) {
                         // 关闭服务
                         TODO()
                     }
-                    navController.navigate(R.id.action_ServerFragment_to_ClientFragment)
-                }else{
+                    // 只能让用户手动返回
+//                    navController.navigate(R.id.action_ServerFragment_to_ClientFragment)
+                } else {
                     // 如果已经连接会断开
-                    if(viewModel.isClientConnected){
+                    if (viewModel.uiState.value.isClientConnected) {
                         // 断开
                         TODO()
                     }
@@ -71,6 +76,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 true
             }
+
             R.id.action_about -> {
                 // 关于
                 val alertDialogBuilder: AlertDialog.Builder = AlertDialog.Builder(this)
@@ -90,6 +96,7 @@ class MainActivity : AppCompatActivity() {
                 alertDialogBuilder.show()
                 true
             }
+
             R.id.action_quit -> {
                 // 退出
                 val alertDialogBuilder: AlertDialog.Builder = AlertDialog.Builder(this)
@@ -102,8 +109,29 @@ class MainActivity : AppCompatActivity() {
                 alertDialogBuilder.show()
                 true
             }
+
             else -> super.onOptionsItemSelected(item)
         }
+    }
+
+    override fun onPrepareOptionsMenu(menu: Menu?): Boolean {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect {
+                    // 服务端、二维码端禁用切换按钮
+                    // https://developer.android.com/develop/ui/views/components/menus?hl=zh-cn
+                    if (menu != null) {
+                        if (it.isServerMode || it.uiIndex == -1) {
+                            // 服务端禁用
+                            menu.getItem(0).setEnabled(false)
+                        } else {
+                            menu.getItem(0).setEnabled(true)
+                        }
+                    }
+                }
+            }
+        }
+        return super.onPrepareOptionsMenu(menu)
     }
 
     override fun onSupportNavigateUp(): Boolean {
@@ -113,7 +141,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun startClient(socket: Socket): Unit {
-        
+
     }
 
     fun startServer(socket: Socket): Unit {

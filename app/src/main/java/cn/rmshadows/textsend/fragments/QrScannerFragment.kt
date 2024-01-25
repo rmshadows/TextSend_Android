@@ -1,9 +1,11 @@
 package cn.rmshadows.textsend.fragments
 
 import androidx.core.os.bundleOf
+import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResult
 import androidx.navigation.fragment.NavHostFragment
 import cn.rmshadows.textsend.R
+import cn.rmshadows.textsend.viewmodels.TextsendViewModel
 import com.google.zxing.Result
 import com.king.camera.scan.AnalyzeResult
 import com.king.camera.scan.CameraScan
@@ -15,11 +17,14 @@ import com.king.zxing.analyze.QRCodeAnalyzer
 
 
 class QrScannerFragment : BarcodeCameraScanFragment() {
+    private val tsviewModel: TextsendViewModel by activityViewModels()
+
     /**
      * 初始化CameraScan
      */
     override fun initCameraScan(cameraScan: CameraScan<Result?>) {
         super.initCameraScan(cameraScan)
+        tsviewModel.update(-1 ,null, null, null)
         // 根据需要设置CameraScan相关配置
         cameraScan.setPlayBeep(true)
     }

@@ -7,31 +7,46 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResultListener
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
-import cn.rmshadows.textsend.MainActivity
 import cn.rmshadows.textsend.R
 import cn.rmshadows.textsend.databinding.FragmentClientBinding
+import cn.rmshadows.textsend.viewmodels.ClientFragmentViewModel
 import cn.rmshadows.textsend.viewmodels.TextsendViewModel
+import kotlinx.coroutines.launch
+import utils.Constant
 
 /**
  * A simple [Fragment] subclass as the default destination in the navigation.
  */
 class ClientFragment : Fragment() {
-    private val TAG: String = MainActivity.TAG
+    private val TAG: String = Constant.TAG
     private var _binding: FragmentClientBinding? = null
     private var toast: Toast? = null
-    private lateinit var viewModel: TextsendViewModel
-
-    // This property is only valid between onCreateView and
-    // onDestroyView.
+    // This property is only valid between onCreateView and onDestroyView.
     private val binding get() = _binding!!
+    private val tsviewModel: TextsendViewModel by activityViewModels()
+    private lateinit var viewModel: ClientFragmentViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Use the Kotlin extension in the fragment-ktx artifact. QRCODE是识别符
-        // 获取二维码扫描值
+        viewModel = ViewModelProvider(this).get(ClientFragmentViewModel::class.java)
+
+        lifecycleScope.launch {
+            // 每秒执行
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.uiState.collect {
+                    tsviewModel.uiState.collect {}
+                }
+            }
+        }
+
+        // 获取二维码扫描值 Use the Kotlin extension in the fragment-ktx artifact. QRCODE是识别符
         setFragmentResultListener("QRCODE") { requestKey, bundle ->
             // We use a String here, but any type that can be put in a Bundle is supported. key是ScanResult
             val result = bundle.getString("ScanResult")
@@ -56,14 +71,14 @@ class ClientFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentClientBinding.inflate(inflater, container, false)
-        viewModel = ViewModelProvider(this).get(TextsendViewModel::class.java)
         return binding.root
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         // 更改状态
-        viewModel.isServerMode.value = false
+        tsviewModel.update(1, false,null,null)
+
         // 客户端连接
         binding.buttonConnect.setOnClickListener {
             findNavController().navigate(R.id.action_ClientFragment_to_ServerFragment)

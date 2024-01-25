@@ -3,7 +3,6 @@ package utils
 import AES_Utils.AES_CFB
 import Datetime_Utils.Datetime_Utils
 import RandomNumber.RandomNumber
-import cn.rmshadows.textsend.MainActivity
 import java.util.LinkedList
 
 object MessageCrypto {
@@ -16,7 +15,7 @@ object MessageCrypto {
      * @param string 字符串
      */
     fun tsEncryptString(string: String?): String {
-        val cfb = AES_CFB(MainActivity.AES_TOKEN, "ES", 32)
+        val cfb = AES_CFB(Constant.AES_TOKEN, "ES", 32)
         return cfb.encrypt(string)
     }
 
@@ -26,7 +25,7 @@ object MessageCrypto {
      * @param string 字符串
      */
     fun tsDecryptString(string: String?): String {
-        val cfb = AES_CFB(MainActivity.AES_TOKEN, "ES", 32)
+        val cfb = AES_CFB(Constant.AES_TOKEN, "ES", 32)
         return cfb.decrypt(string)
     }
 

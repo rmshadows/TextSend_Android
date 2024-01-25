@@ -1,10 +1,12 @@
 package cn.rmshadows.textsend.viewmodels
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import utils.Constant
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.NetworkInterface
@@ -18,7 +20,7 @@ data class ServerState(
     // 服务运行的端口号
     val serverListenPort: String = "54300",
     // IP列表
-    val netIps: LinkedList<String>? = null,
+    val netIps: LinkedList<String> = LinkedList<String>(),
     // 服务端服务是否正在运行
     val serverRunning: Boolean = false,
     // 客户端最大链接数量
@@ -30,6 +32,7 @@ data class ServerState(
  * 注意：ViewModel 通常不应引用视图、Lifecycle 或可能存储对 activity 上下文的引用的任何类。由于 ViewModel 的生命周期大于界面的生命周期，因此在 ViewModel 中保留与生命周期相关的 API 可能会导致内存泄漏。
  */
 class ServerFragmentViewModel : ViewModel() {
+    val TAG = Constant.TAG
     // Expose screen UI state
     private val _uiState = MutableStateFlow(ServerState())
     val uiState: StateFlow<ServerState> = _uiState.asStateFlow()
@@ -44,6 +47,8 @@ class ServerFragmentViewModel : ViewModel() {
         maxConnectionVal: Number?
     ) {
         _uiState.update { currentState ->
+            Log.d(TAG, "sfupdate: ${preferIpAddrVal}, ${serverListenPortVal}, ${netIpsVal}" +
+                    ", ${serverRunningVal}, ${maxConnectionVal}")
             currentState.copy(
                 preferIpAddr = preferIpAddrVal ?: currentState.preferIpAddr,
                 serverListenPort = serverListenPortVal ?: currentState.serverListenPort,
@@ -52,6 +57,11 @@ class ServerFragmentViewModel : ViewModel() {
                 maxConnection = maxConnectionVal ?: currentState.maxConnection
             )
         }
+    }
+
+    override fun onCleared() {
+        Log.d(TAG, "onCleared: ServerViewModel")
+        super.onCleared()
     }
 
     /**
@@ -104,12 +114,6 @@ class ServerFragmentViewModel : ViewModel() {
                     prefer_ip
                 )
             }
-        }
-        try {
-            println("\n正在初始化...")
-            Thread.sleep(500)
-        } catch (e: InterruptedException) {
-            e.printStackTrace()
         }
 //        return prefer_ip
         update(prefer_ip, null, ip_addr, null, null)
