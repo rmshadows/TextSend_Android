@@ -1,5 +1,6 @@
 package cn.rmshadows.textsend.fragments
 
+import android.os.Bundle
 import androidx.core.os.bundleOf
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResult
@@ -19,12 +20,16 @@ import com.king.zxing.analyze.QRCodeAnalyzer
 class QrScannerFragment : BarcodeCameraScanFragment() {
     private val tsviewModel: TextsendViewModel by activityViewModels()
 
+    override fun onCreate(savedInstanceState: Bundle?) {
+        tsviewModel.update(-1 ,null, null, null, null, null, null)
+        super.onCreate(savedInstanceState)
+    }
+
     /**
      * 初始化CameraScan
      */
     override fun initCameraScan(cameraScan: CameraScan<Result?>) {
         super.initCameraScan(cameraScan)
-        tsviewModel.update(-1 ,null, null, null, null, null, null)
         // 根据需要设置CameraScan相关配置
         cameraScan.setPlayBeep(true)
     }
@@ -64,6 +69,11 @@ class QrScannerFragment : BarcodeCameraScanFragment() {
         // Use the Kotlin extension in the fragment-ktx artifact. 对应识别符"QRCODE" key是ScanResult
         setFragmentResult("QRCODE", bundleOf("ScanResult" to qrResult))
         // 返回客户端连接界面
-        NavHostFragment.findNavController(this).navigate(R.id.action_qrScannerFragment_to_ClientFragment);
+        NavHostFragment.findNavController(this).navigate(R.id.action_qrScannerFragment_to_ClientFragment)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        tsviewModel.update(1, null, false, null, null, null, -1)
     }
 }

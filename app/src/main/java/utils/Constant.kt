@@ -8,7 +8,9 @@ class Constant {
         // 加密用的Token
         const val AES_TOKEN = "cn.rmshadows.TS_TOKEN"
         // TAG
-        val TAG: String = "==>>APP DEBUG<<=="
+        const val TAG: String = "==>>APP DEBUG<<=="
+        // 清除文本的标致
+        const val CF = "㊒㊚㊖㊛"
 
         // Server
         // 服务器消息自带的ID

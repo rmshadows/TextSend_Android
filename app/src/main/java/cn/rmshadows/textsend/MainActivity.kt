@@ -14,20 +14,15 @@ import androidx.navigation.ui.AppBarConfiguration
 import androidx.navigation.ui.navigateUp
 import androidx.navigation.ui.setupActionBarWithNavController
 import cn.rmshadows.textsend.databinding.ActivityMainBinding
-import cn.rmshadows.textsend.viewmodels.ServerFragmentViewModel
 import cn.rmshadows.textsend.viewmodels.TextsendViewModel
 import kotlinx.coroutines.launch
-import utils.Constant
-import java.net.Socket
 import kotlin.system.exitProcess
 
 
 class MainActivity : AppCompatActivity() {
-    val TAG = Constant.TAG
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: TextsendViewModel
-    private lateinit var sfviewModel: ServerFragmentViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,8 +33,7 @@ class MainActivity : AppCompatActivity() {
         appBarConfiguration = AppBarConfiguration(navController.graph)
         setupActionBarWithNavController(navController, appBarConfiguration)
 
-        viewModel = ViewModelProvider(this).get(TextsendViewModel::class.java)
-        sfviewModel = ViewModelProvider(this).get(ServerFragmentViewModel::class.java)
+        viewModel = ViewModelProvider(this)[TextsendViewModel::class.java]
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -54,26 +48,10 @@ class MainActivity : AppCompatActivity() {
         // as you specify a parent activity in AndroidManifest.xml.
         return when (item.itemId) {
             R.id.action_switch -> {
-                // 切换模式 TODO: 模式切换还不写
                 // https://stackoverflow.com/questions/58686104/why-does-my-navcontroller-cannot-find-an-id-that-i-already-have
                 // 必须有上面这一句
                 val navController = findNavController(R.id.nav_host_fragment_content_main)
-                if (viewModel.uiState.value.isServerMode) {
-                    // 如果已经连接会断开
-                    if (sfviewModel.uiState.value.serverRunning) {
-                        // 关闭服务
-                        TODO()
-                    }
-                    // 只能让用户手动返回
-//                    navController.navigate(R.id.action_ServerFragment_to_ClientFragment)
-                } else {
-                    // 如果已经连接会断开
-                    if (viewModel.uiState.value.isClientConnected) {
-                        // 断开
-                        TODO()
-                    }
-                    navController.navigate(R.id.action_ClientFragment_to_ServerFragment)
-                }
+                navController.navigate(R.id.action_ClientFragment_to_ServerFragment)
                 true
             }
 
@@ -118,15 +96,10 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect {
-                    // 服务端、二维码端禁用切换按钮
+                    // 非客户端禁用切换按钮
                     // https://developer.android.com/develop/ui/views/components/menus?hl=zh-cn
                     if (menu != null) {
-                        if (it.isServerMode || it.uiIndex == -1) {
-                            // 服务端禁用
-                            menu.getItem(0).setEnabled(false)
-                        } else {
-                            menu.getItem(0).setEnabled(true)
-                        }
+                        menu.getItem(0).isEnabled = it.uiIndex == 1
                     }
                 }
             }
@@ -138,13 +111,5 @@ class MainActivity : AppCompatActivity() {
         val navController = findNavController(R.id.nav_host_fragment_content_main)
         return navController.navigateUp(appBarConfiguration)
                 || super.onSupportNavigateUp()
-    }
-
-    fun startClient(socket: Socket): Unit {
-
-    }
-
-    fun startServer(socket: Socket): Unit {
-
     }
 }

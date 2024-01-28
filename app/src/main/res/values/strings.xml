@@ -32,7 +32,6 @@
     <!--  服务端  -->
     <string name="server_switch_btn_one">切换单用户模式</string>
     <string name="server_switch_btn_multi">切换多用户模式</string>
-    <string name="server_switch_btn_client_count">消息界面/0</string>
     <string name="server_start_btn">启动服务</string>
     <string name="server_stop_btn">停止服务</string>
     <string name="server_content_description">二维码图片</string>

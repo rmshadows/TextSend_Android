@@ -1,6 +1,7 @@
 package utils
 
 import ScheduleTask.ScheduleTask
+import android.util.Log
 import cn.rmshadows.textsend.viewmodels.ServerFragmentViewModel
 import cn.rmshadows.textsend.viewmodels.TextsendViewModel
 import java.io.IOException
@@ -18,31 +19,47 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * @author jessie
  */
-class SocketDeliver(val tsviewModel: TextsendViewModel, val viewModel: ServerFragmentViewModel) : Runnable {
+class SocketDeliver(val tsviewModel: TextsendViewModel, val viewModel: ServerFragmentViewModel) :
+    Runnable {
     // 创建一个线程池
     private val executorService = Executors.newFixedThreadPool(10)
+    val TAG = Constant.TAG
 
     override fun run() {
-        System.err.println("启动移动端Textsend服务...")
+        val lport = viewModel.uiState.value.serverListenPort.toInt()
+        Log.i(TAG, "启动移动端Textsend服务(监听：${lport})...")
         try {
             /* backlog是ServerSocket类中的参数，用来指定ServerSocket中等待客户端连接队列的最大数量，并且每调用一次accept方法，就从等待队列中取一个客户端连接出来，因此队列又空闲出一个位置出来，这里有两点需要注意：
                 1、将等待队列设置得过大，容易造成内存溢出，因为所有的客户端连接都会堆积在等待队列中；
                 2、不断的调用accpet方法如果是长任务容易内存溢出，并且文件句柄数会被耗光。
              */
-            server = ServerSocket(viewModel.uiState.value.serverListenPort.toInt(), viewModel.uiState.value.maxConnection.toInt())
+            server = ServerSocket(
+                lport,
+                viewModel.uiState.value.maxConnection.toInt()
+            )
             // 监听服务是否停止
             scheduleControl.set(true) // 开启定时器
             Thread {
                 val Task = Runnable {
                     // 如果服务停止 Socket停止
-                    if (! tsviewModel.uiState.value.isServerMode) {
-                        stopSocketDeliver()
+                    if (!tsviewModel.uiState.value.isServerMode) {
+                        stopSocketDeliver(tsviewModel, viewModel)
                         scheduleControl.set(false)
                     } else {
-                        // 如果服务端开启多连接 显示连接数
-                        if (! viewModel.uiState.value.serverListenPort.toInt().equals(1)) {
-                            val clientCount = socketList.size
-                            viewModel.update(null,null,null,null,null,clientCount)
+                        // 显示连接数
+                        val clientCount = socketList.size
+                        // 更新连接数
+                        if (!clientCount.equals(viewModel.uiState.value.clientCount)) {
+                            if(clientCount.equals(0)){
+                                // 连接0就是客户端没连接
+                                tsviewModel.update(null,null,false,null,null,null,null)
+                            }else{
+                                // 连接不为0,且客户端未连接更新状态
+                                if(!tsviewModel.uiState.value.isClientConnected){
+                                    tsviewModel.update(null,null,true,null,null,null,null)
+                                }
+                            }
+                            viewModel.update(null, null, null, null, null, clientCount)
                         }
                     }
                 }
@@ -61,7 +78,7 @@ class SocketDeliver(val tsviewModel: TextsendViewModel, val viewModel: ServerFra
                 if (socketList.size < viewModel.uiState.value.maxConnection.toInt()) {
                     val socket: Socket
                     try {
-                        println("Socket is delivering......")
+                        Log.i(TAG, "Socket is delivering......")
                         socket = server!!.accept()
                         val client = ServerMessageController(socket, tsviewModel, viewModel)
                         // 断开后删除列表的方法写在ServerMessageController
@@ -72,9 +89,9 @@ class SocketDeliver(val tsviewModel: TextsendViewModel, val viewModel: ServerFra
                                 Thread.sleep(8000)
                                 if (client.connectionStat != 2) {
                                     client.closeCurrentClientSocket()
-                                    System.err.println("连接超时，断开客户端。")
+                                    Log.i(TAG, "连接超时，断开客户端。")
                                 } else {
-                                    println("检测到客户端连接成功")
+                                    Log.i(TAG, "检测到客户端连接成功")
                                 }
                             } catch (e: InterruptedException) {
                                 throw RuntimeException(e)
@@ -93,11 +110,10 @@ class SocketDeliver(val tsviewModel: TextsendViewModel, val viewModel: ServerFra
                 500, 800, TimeUnit.SECONDS
             ).startTask()
         } catch (e: BindException) {
-            stopSocketDeliver()
-            // TODO:插入ui修改
-            println("Port Already in use.")
+            stopSocketDeliver(tsviewModel, viewModel)
+            Log.i(TAG, "Port Already in use.")
         } catch (e: Exception) {
-            stopSocketDeliver()
+            stopSocketDeliver(tsviewModel, viewModel)
             e.printStackTrace()
         }
     }
@@ -110,10 +126,10 @@ class SocketDeliver(val tsviewModel: TextsendViewModel, val viewModel: ServerFra
         var server: ServerSocket? = null
 
         // 控制定时器停止
-        var scheduleControl = AtomicBoolean(false)
+        val scheduleControl = AtomicBoolean(false)
 
         // 控制Socket分发 true为允许分发 false 不允许分发，但保持现有连接
-        var socketDeliveryControl = AtomicBoolean(false)
+        val socketDeliveryControl = AtomicBoolean(false)
 
         /**
          * 服务端会把消息广播给所有客户端
@@ -127,7 +143,7 @@ class SocketDeliver(val tsviewModel: TextsendViewModel, val viewModel: ServerFra
         /**
          * 检测到服务端停止，从内部停止socket
          */
-        fun stopSocketDeliver() {
+        fun stopSocketDeliver(tsviewModel: TextsendViewModel, viewModel: ServerFragmentViewModel) {
             // 关闭服务端Socket
             try {
                 server!!.close()
@@ -145,7 +161,10 @@ class SocketDeliver(val tsviewModel: TextsendViewModel, val viewModel: ServerFra
             // 二次赋值了
             scheduleControl.set(false)
             socketDeliveryControl.set(false)
-            System.err.println("Socket Server shutdown.")
+            // 这里更新UI
+            viewModel.update(null, null, null, false, null, null)
+            tsviewModel.update(null, null, false, null, null, null, -1)
+            Log.i(Constant.TAG, "Socket Server shutdown.")
         }
     }
 }

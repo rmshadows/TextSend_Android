@@ -1,5 +1,6 @@
 package utils
 
+import android.util.Log
 import utils.MessageCrypto.tsEncryptString
 import java.io.Serializable
 import java.util.LinkedList
@@ -30,7 +31,7 @@ class Message(id: String?, text: String?, length: Int, notes: String?) :
         if (mtext == null) {
             mtext = ""
         } else {
-            println("Message encapsulation：$mtext")
+            Log.i(Constant.TAG, "Message encapsulation：$mtext")
         }
         this.id = id
         if (notes != null) {

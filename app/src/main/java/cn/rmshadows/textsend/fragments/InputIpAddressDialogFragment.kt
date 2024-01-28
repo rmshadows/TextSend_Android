@@ -6,9 +6,11 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import cn.rmshadows.textsend.R
+import utils.IPAddressFilter
 
 
 class InputIpAddressDialogFragment : DialogFragment() {
@@ -25,12 +27,20 @@ class InputIpAddressDialogFragment : DialogFragment() {
         val inflater: LayoutInflater = requireActivity().layoutInflater
         val view: View = inflater.inflate(R.layout.fragment_input_dialog, null)
         builder.setView(view)
-            .setMessage("手动指定IP地址：")
-            .setPositiveButton("确定") { dialog, which ->
+            .setMessage("手动指定IP地址(IPv6需要中括号'[Ipv6]')：")
+            .setPositiveButton("确定") { _, _ ->
                 val et = view.findViewById<EditText>(R.id.inputEditText)
                 val ipInput: String = et.text.toString()
-                if (!et.text.isEmpty()) {
-                    onInputReceived?.onInputIpReceived(ipInput)
+                if (et.text.isNotEmpty()) {
+                    if(IPAddressFilter.getIpType(ipInput) != 1 && IPAddressFilter.getIpType(ipInput) != 2){
+                        Toast.makeText(
+                            context,
+                            "请输入有效的IPv4或者IPv6地址(需要中括号)",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }else{
+                        onInputReceived?.onInputIpReceived(ipInput)
+                    }
                 }
             }
             .setNegativeButton("取消", null)
@@ -52,5 +62,4 @@ class InputIpAddressDialogFragment : DialogFragment() {
     companion object {
         const val TAG = "getIpDialog"
     }
-
 }

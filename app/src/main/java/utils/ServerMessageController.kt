@@ -1,5 +1,6 @@
 package utils
 
+import android.util.Log
 import cn.rmshadows.textsend.viewmodels.ServerFragmentViewModel
 import cn.rmshadows.textsend.viewmodels.TextsendViewModel
 import com.google.gson.Gson
@@ -22,13 +23,18 @@ import java.util.stream.Stream
 /**
  * 此类仅对应一个连接！
  */
-class ServerMessageController( // 实例私有属性
+class ServerMessageController(
     var socket: Socket,
     val tsviewModel: TextsendViewModel,
     val viewModel: ServerFragmentViewModel
 ) : Runnable {
+
+    val TAG = Constant.TAG
     var transmissionModeSet = -1
     var clientId: String
+
+    // 客户端IP
+    val clientIP: String
 
     // 连接状态 -1 未连接 0:连接 分配ID中 1:分配完ID 分配模式中 2:正常通信 -2:断开连接
     var connectionStat = -1
@@ -39,9 +45,6 @@ class ServerMessageController( // 实例私有属性
                 transmissionModeSet = 1
             }
         }
-
-    // 客户端IP
-    val clientIP: String
 
     /**
      * 断开当前客户端
@@ -54,11 +57,7 @@ class ServerMessageController( // 实例私有属性
             socket.close()
             // 移除列表
             SocketDeliver.socketList.remove(this)
-            System.out.printf(
-                "主动断开 用户 %s (%s) 。%n",
-                clientIP,
-                clientId
-            )
+            Log.i(TAG, "closeCurrentClientSocket: 主动断开 用户 ${clientIP} (${clientId}) 。%n")
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -87,7 +86,7 @@ class ServerMessageController( // 实例私有属性
      * 反馈核对信息到移动端，确保消息接收到 但不保证无误
      */
     fun messageFeedBack() {
-        println("发送反馈信息到客户端。")
+        Log.i(TAG, "发送反馈信息到客户端。")
         sendMessage(Message(SERVER_ID, null, MSG_LEN, FB_MSG))
     }
 
@@ -96,7 +95,7 @@ class ServerMessageController( // 实例私有属性
         val receiver = Thread(ServerMessageReceiver(this, tsviewModel, viewModel))
         receiver.start()
         // 发送客户端ID给客户端
-        println("ID -> " + clientIP + "(" + clientId + ")")
+        Log.i(TAG, "ID -> ${clientIP} (${clientId})")
         sendMessage(
             Message(
                 SERVER_ID, null, MSG_LEN,
@@ -135,6 +134,7 @@ internal class ServerMessageTransmitter(
     private var objectOutputStream: ObjectOutputStream? = null
     var serverMessageController: ServerMessageController
     private val transmitterTransmissionMode: Int
+    val TAG = Constant.TAG
 
     init {
         val socket = serverMessageController.socket
@@ -161,7 +161,7 @@ internal class ServerMessageTransmitter(
             val egm = MessageToEncrypptedGsonMessage(msg!!)
             if (transmitterTransmissionMode == 0 || transmitterTransmissionMode == 1) {
                 // JSON传输
-                println("Send to " + serverMessageController.clientIP + " (JSON)\n")
+                Log.i(TAG, "Send to ${serverMessageController.clientIP} (JSON)\n")
                 // 将GSM对象读取成文字传输
                 var read: Int
                 val buf = ByteArray(1024)
@@ -179,7 +179,7 @@ internal class ServerMessageTransmitter(
                 // 会关闭输入流（GSM对象读取完了就关闭），不会关闭输出流(会关闭Socket)
                 bufferedInputStream.close()
             } else if (transmitterTransmissionMode == 2) {
-                println("Send to " + serverMessageController.clientIP + " (Object)\n")
+                Log.i(TAG, "Send to ${serverMessageController.clientIP} (Object)\n")
                 // 已经序列化GSM
                 objectOutputStream!!.writeObject(egm)
                 objectOutputStream!!.flush()
@@ -208,6 +208,7 @@ internal class ServerMessageReceiver(
     private var objectInputStream: ObjectInputStream? = null
     private var bufferedInputStream: BufferedInputStream? = null
     private val receiverTransmissionMode: Int
+    val TAG = Constant.TAG
 
     init {
         receiverTransmissionMode = serverMessageController.transmissionModeSet
@@ -241,11 +242,11 @@ internal class ServerMessageReceiver(
                         break
                     }
 //                    val read = kotlin.String(readBuf, 0, readLength, StandardCharsets.UTF_8)
-                    val read: String = String(readBuf, 0, readLength, Charsets.UTF_8)
+                    val read = String(readBuf, 0, readLength, Charsets.UTF_8)
                     chunk.append(read)
                     // 读取到JSON末尾
                     if (read.endsWith("}")) {
-                        println("Received chunk: $chunk")
+                        Log.i(TAG, "Received chunk: $chunk")
                         // 这里开始处理
                         val egm = JSONtoGsonMessage(chunk.toString())
                         // 解密后的信息
@@ -280,16 +281,15 @@ internal class ServerMessageReceiver(
                                     )
                                     // 收到客户端发送的模式清单，说明客户端接受了ID请求，状态直接0变为2。 注意：直接进入接受传输模式交流
                                     serverMessageController.connectionStat = 2
-                                    System.err.printf(
-                                        "用户 %s (%s) 已上线。%n",
-                                        serverMessageController.clientIP,
-                                        serverMessageController.clientId
+                                    Log.i(
+                                        TAG,
+                                        "用户 ${serverMessageController.clientIP} (${serverMessageController.clientId}) 已上线。\n"
                                     )
                                 } else {
-                                    println("Drop id message (on get support mode :support mode error.) : $cgm")
+                                    Log.i(TAG, "Drop id message (on get support mode :support mode error.) : $cgm")
                                 }
                             } else {
-                                println("Drop id message (on get support mode :id wrong) : $cgm")
+                                Log.i(TAG, "Drop id message (on get support mode :id wrong) : $cgm")
                             }
                         } else {
                             if (cgm != null) {
@@ -297,7 +297,7 @@ internal class ServerMessageReceiver(
                                 if ((cgm.id == serverMessageController.clientId)) {
                                     if (cgm.notes == ServerMessageController.FB_MSG) {
                                         // 处理反馈信息
-                                        println("客户端收到了消息。")
+                                        Log.i(TAG, "客户端收到了消息。")
                                         tsviewModel.cleanEditText()
                                     } else {
                                         val text = StringBuilder()
@@ -306,15 +306,20 @@ internal class ServerMessageReceiver(
                                         }
                                         // 反馈客户端 注意：仅代表服务端收到信息
                                         serverMessageController.messageFeedBack()
-                                        println(
-                                            "Received: " + serverMessageController.clientIP
-                                                    + "(" + serverMessageController.clientId + ") <- " + text
+                                        Log.i(TAG, "Received: ${serverMessageController.clientIP}(${serverMessageController.clientId}) < - ${text}")
+                                        tsviewModel.update(
+                                            null,
+                                            null,
+                                            null,
+                                            null,
+                                            null,
+                                            text.toString(),
+                                            null
                                         )
-                                        copyToClickboard(text.toString())
                                     }
                                 } else {
                                     // 丢弃的常规通讯信息
-                                    println("Drop id message (json mode) : $cgm")
+                                    Log.i(TAG, "Drop id message (json mode) : $cgm")
                                 }
                             }
                         }
@@ -322,7 +327,7 @@ internal class ServerMessageReceiver(
                         chunk = StringBuilder()
                     }
                 }
-                println("Socket has ended.")
+                Log.i(TAG, "Socket has ended.")
                 serverMessageController.connectionStat = -2
                 tsviewModel.update(null, null, false, null, null, null, null)
             } else if (receiverTransmissionMode == 2) {
@@ -337,7 +342,7 @@ internal class ServerMessageReceiver(
                             // 如果是客户端的反馈信息
                             if ((cgm.notes == ServerMessageController.FB_MSG)) {
                                 // 处理反馈信息
-                                println("客户端收到了消息。")
+                                Log.i(TAG, "客户端收到了消息。")
                                 tsviewModel.cleanEditText()
                             } else {
                                 val text = StringBuilder()
@@ -346,11 +351,20 @@ internal class ServerMessageReceiver(
                                 }
                                 // 反馈服务器
                                 serverMessageController.messageFeedBack()
-                                println(
-                                    ("Received: " + serverMessageController.clientIP
-                                            + "(" + serverMessageController.clientId + ") <- " + text)
+                                Log.i(
+                                    TAG,
+                                    "Received: ${serverMessageController.clientIP} (${serverMessageController.clientId}) <- ${text}"
                                 )
-                                copyToClickboard(text.toString())
+                                // 更新这个就会复制到剪贴板
+                                tsviewModel.update(
+                                    null,
+                                    null,
+                                    null,
+                                    null,
+                                    null,
+                                    text.toString(),
+                                    null
+                                )
                             }
                         }
                     }
@@ -385,7 +399,7 @@ internal class ServerMessageReceiver(
                 jsonObject["supportMode"],
                 Array<String>::class.java
             )
-            System.err.println("获取到客户端支持的模式：" + Arrays.toString(strings))
+            Log.i(TAG, "selectClientMode: 获取到客户端支持的模式：${Arrays.toString(strings)}")
             // 不使用Supplier会: stream has already been operated upon or closed
             val streamSupplier =
                 Supplier {
@@ -396,10 +410,10 @@ internal class ServerMessageReceiver(
 
             // 支持Object传输就用 2
             if (streamSupplier.get().anyMatch({ n: String -> (n == "2") })) {
-                println("客户端支持Object传输，使用模式2。")
+                Log.i(TAG, "selectClientMode: 客户端支持Object传输，使用模式2。")
                 return "2"
             } else if (streamSupplier.get().anyMatch({ n: String -> (n == "1") })) {
-                println("客户端支持Object传输，使用模式1。")
+                Log.i(TAG, "selectClientMode: 客户端支持Object传输，使用模式1。")
                 return "1"
             } else {
                 throw IOException("客户端支持传输模式不支持。")
@@ -407,18 +421,6 @@ internal class ServerMessageReceiver(
         } catch (e: Exception) {
             e.printStackTrace()
             return null
-        }
-    }
-
-    companion object {
-        /**
-         * 复制收到的消息到剪贴板
-         *
-         * @param text 消息
-         */
-        private fun copyToClickboard(text: String) {
-            // TODO
-            println("已复制到剪辑板。")
         }
     }
 }
