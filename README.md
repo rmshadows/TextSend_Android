@@ -83,6 +83,12 @@
 - 2020.07.15——2.1.0
   - 旧版本
 
+### 开发备忘录
+
+- APP版本：
+  - `build.gradle.kts`
+  - `strings.xml`
+
  ### 截屏
 
  ![ss](https://images.gitee.com/uploads/images/2020/0711/160554_6d64861e_7423713.png "屏幕截图.png")
