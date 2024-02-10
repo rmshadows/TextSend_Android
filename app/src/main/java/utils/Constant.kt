@@ -1,5 +1,10 @@
 package utils
 
+import java.nio.charset.StandardCharsets
+
+
+
+
 class Constant {
     companion object {
         // Public
@@ -11,6 +16,8 @@ class Constant {
         const val TAG: String = "==>>APP DEBUG<<=="
         // 清除文本的标致
         const val CF = "㊒㊚㊖㊛"
+        // OBJECT传输结束标记
+        val endMarker = "▓⒣".toByteArray(StandardCharsets.UTF_8)
 
         // Server
         // 服务器消息自带的ID

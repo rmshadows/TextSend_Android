@@ -53,7 +53,7 @@ class MessengerFragment : Fragment() {
                         // 模拟用户返回上级
                         Toast.makeText(
                             context,
-                            "Opps...",
+                            "Disconnect.",
                             Toast.LENGTH_SHORT
                         ).show()
                         Log.d(Constant.TAG, "onCreateView: 消息界面主动返回")
@@ -80,15 +80,17 @@ class MessengerFragment : Fragment() {
                 )
                 SocketDeliver.sendMessageToAllClients(m)
             } else {
-                ClientMessageController.sendMessageToServer(
-                    Message(
-                        ClientMessageController.clientId,
-                        binding.editText.text.toString(),
-                        Constant.MSG_LEN,
-                        null
-                    ),
-                    tsviewModel
-                )
+                Thread {
+                    ClientMessageController.sendMessageToServer(
+                        Message(
+                            ClientMessageController.clientId,
+                            binding.editText.text.toString(),
+                            Constant.MSG_LEN,
+                            null
+                        ),
+                        tsviewModel
+                    )
+                }.start()
             }
         }
     }
