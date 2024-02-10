@@ -37,7 +37,7 @@
     <fragment
         android:id="@+id/messengerFragment"
         android:name="cn.rmshadows.textsend.fragments.MessengerFragment"
-        android:label="fragment_messenger"
+        android:label="Textsend for Android"
         tools:layout="@layout/fragment_messenger" >
         <action
             android:id="@+id/action_messengerFragment_to_ClientFragment"
@@ -49,7 +49,7 @@
     <fragment
         android:id="@+id/qrScannerFragment"
         android:name="cn.rmshadows.textsend.fragments.QrScannerFragment"
-        android:label="QrScannerFragment" >
+        android:label="二维码扫描" >
         <action
             android:id="@+id/action_qrScannerFragment_to_ClientFragment"
             app:destination="@id/ClientFragment" />

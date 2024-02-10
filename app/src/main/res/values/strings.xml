@@ -1,9 +1,10 @@
 <resources>
     <string name="app_name">Textsend</string>
     <string name="app_name_full">Textsend for Android</string>
-    <string name="app_version">4.0.1</string>
+    <string name="app_version">4.0.4</string>
     <string name="app_Author">Ryan Yim</string>
     <string name="app_License">GPLv3</string>
+    <string name="github">https://github.com/rmshadows/TextSend_Android</string>
     <!--  菜单  -->
     <string name="action_switch">切换</string>
     <string name="action_switchToServer">切换服务端</string>
@@ -11,8 +12,8 @@
     <string name="action_about">关于</string>
     <string name="action_quit">退出</string>
     <!-- Strings used for fragments for navigation -->
-    <string name="client_fragment_label">Textsend Client</string>
-    <string name="server_fragment_label">Textsend Server</string>
+    <string name="client_fragment_label">Textsend 客户端</string>
+    <string name="server_fragment_label">Textsend 服务端</string>
     <string name="message_fragment_label">Textsend for Android</string>
     <string name="qrcode_fragment_label">Textsend QR Code</string>
     <!--  客户端连接  -->
@@ -39,9 +40,4 @@
 
     <!--  服务端信息输入对话框  -->
     <string name="server_input_edittext">请输入...</string>
-
-    <!--  保留字段  -->
-    <string name="lorem_ipsum">
-        Lorem ipsum.
-    </string>
 </resources>

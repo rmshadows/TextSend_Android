@@ -5,6 +5,7 @@ import android.view.Menu
 import android.view.MenuItem
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.text.HtmlCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
@@ -56,22 +57,57 @@ class MainActivity : AppCompatActivity() {
             }
 
             R.id.action_about -> {
-                // 关于
+                // 如果使用HTMLL:
                 val alertDialogBuilder: AlertDialog.Builder = AlertDialog.Builder(this)
-                // 如果import中有R，则失效
                 alertDialogBuilder.setIcon(R.mipmap.ic_textsend)
                 val message = StringBuilder()
+                message.append("<b>&nbsp;&nbsp;")
                 message.append(resources.getString(R.string.app_name_full))
-                message.append("\n\nVersion: ")
+                message.append("</b><br/><br/>Version: &nbsp;&nbsp;&nbsp;&nbsp;")
                 message.append(resources.getString(R.string.app_version))
-                message.append("\nAuthor: ")
-                message.append(resources.getString(R.string.app_version))
-                message.append("\nLICENSE: ")
+                message.append("<br/>Author: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;")
+                message.append(resources.getString(R.string.app_Author))
+                message.append("<br/>LICENSE: &nbsp;&nbsp;")
                 message.append(resources.getString(R.string.app_License))
+                message.append("<br/>Github: &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;")
+                message.append("<a href='${resources.getString(R.string.github)}'>${resources.getString(R.string.github)}</a><br/><br/>")
                 alertDialogBuilder.setTitle("About")
-                alertDialogBuilder.setMessage(message)
+                alertDialogBuilder.setMessage(HtmlCompat.fromHtml(message.toString(), HtmlCompat.FROM_HTML_MODE_LEGACY))
                 alertDialogBuilder.setNegativeButton("Close") { _, _ -> } //...To-do
                 alertDialogBuilder.show()
+
+                // 使用新建Textview
+//                // 关于
+//                val alertDialogBuilder: AlertDialog.Builder = AlertDialog.Builder(this)
+//                // 如果import中有R，则失效
+//                alertDialogBuilder.setIcon(R.mipmap.ic_textsend)
+//                val message = StringBuilder()
+//                message.append(resources.getString(R.string.app_name_full))
+//                message.append("\n\nVersion: ")
+//                message.append(resources.getString(R.string.app_version))
+//                message.append("\nAuthor: ")
+//                message.append(resources.getString(R.string.app_Author))
+//                message.append("\nLICENSE: ")
+//                message.append(resources.getString(R.string.app_License))
+//                message.append("\nGithub: ")
+//                message.append(resources.getString(R.string.github))
+//                // alertDialogBuilder.setMessage(message)
+//
+//                // 创建一个可点击的链接
+//                val githubTextView = TextView(this)
+//                githubTextView.text = message.toString()
+//                Linkify.addLinks(githubTextView, Linkify.WEB_URLS)
+//                val githubClickableText = SpannableString(githubTextView.text)
+//                githubTextView.text = githubClickableText
+//                githubTextView.linksClickable = true
+//                githubTextView.movementMethod = LinkMovementMethod.getInstance()
+//                githubTextView.setPadding(80,80,80,80)
+//                // 将 TextView 添加到对话框中
+//                alertDialogBuilder.setView(githubTextView)
+//
+//                alertDialogBuilder.setTitle("About")
+//                alertDialogBuilder.setNegativeButton("Close") { _, _ -> } //...To-do
+//                alertDialogBuilder.show()
                 true
             }
 

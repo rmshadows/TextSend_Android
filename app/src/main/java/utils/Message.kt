@@ -28,10 +28,10 @@ class Message(id: String?, text: String?, length: Int, notes: String?) :
     init {
         // 去除null
         var mtext = text
-        if (mtext == null) {
+        if (mtext == null || mtext == "") {
             mtext = ""
         } else {
-            Log.i(Constant.TAG, "Message encapsulation：$mtext")
+            Log.i(Constant.TAG, "【封装】Message：$mtext")
         }
         this.id = id
         if (notes != null) {

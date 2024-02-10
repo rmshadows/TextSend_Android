@@ -156,9 +156,9 @@ internal class ServerMessageTransmitter(
             if (transmitterTransmissionMode == 0 || transmitterTransmissionMode == 1) {
                 // JSON传输
                 if (msg.notes == ServerMessageController.FB_MSG) {
-                    println("Log: 【发送反馈】JSON => " + serverMessageController.clientIP + ": " + egm)
+                    Log.i(TAG, "Log: 【发送反馈】JSON => " + serverMessageController.clientIP + ": " + egm)
                 } else {
-                    println("Log: 【发送】JSON => " + serverMessageController.clientIP + ": " + egm)
+                    Log.i(TAG, "Log: 【发送】JSON => " + serverMessageController.clientIP + ": " + egm)
                 }
                 // 将GSM对象读取成文字传输
                 var read: Int
@@ -179,9 +179,9 @@ internal class ServerMessageTransmitter(
             } else if (transmitterTransmissionMode == 2) {
                 // OBJECT传输
                 if (msg.notes == ServerMessageController.FB_MSG) {
-                    println("Log: 【发送反馈】OBJECT => " + serverMessageController.clientIP + ": " + egm)
+                    Log.i(TAG, "Log: 【发送反馈】OBJECT => " + serverMessageController.clientIP + ": " + egm)
                 } else {
-                    println("Log: 【发送】OBJECT => " + serverMessageController.clientIP + ": " + egm)
+                    Log.i(TAG, "Log: 【发送】OBJECT => " + serverMessageController.clientIP + ": " + egm)
                 }
                 // 将对象序列化为字节数组并分块发送
                 val begm = gsonMessage2bytes(egm)
@@ -195,7 +195,7 @@ internal class ServerMessageTransmitter(
             }
         } catch (e: java.lang.Exception) {
             // 发送出错会断开连接
-            System.err.println("ServerMessageTransmitterError: ")
+            Log.i(TAG, "ServerMessageTransmitterError: ")
             e.printStackTrace()
             serverMessageController.closeCurrentClientSocket()
         }
@@ -252,7 +252,7 @@ internal class ServerMessageReceiver(
                         chunk.append(read)
                         // 读取到JSON末尾
                         if (read.endsWith("}")) {
-                            println("Log: 【接收】1: <== : $chunk")
+                            Log.i(TAG, "Log: 【接收】1: <== : $chunk")
                             // 这里开始处理
                             val egm = JSONtoGsonMessage(chunk.toString())
                             // 解密后的信息
@@ -296,11 +296,14 @@ internal class ServerMessageReceiver(
                                             serverMessageController.clientId,
                                             serverMessageController.transmissionModeSet
                                         )
+                                        if(receiverTransmissionMode == 2){
+                                            break
+                                        }
                                     } else {
-                                        println("Log: 【丢弃】1:Drop id message (on get support mode :support mode error.) : $cgm")
+                                        Log.i(TAG, "Log: 【丢弃】1:Drop id message (on get support mode :support mode error.) : $cgm")
                                     }
                                 } else {
-                                    println("Log: 【丢弃】1:Drop id message (on get support mode :id wrong) : $cgm")
+                                    Log.i(TAG, "Log: 【丢弃】1:Drop id message (on get support mode :id wrong) : $cgm")
                                 }
                             } else {
                                 if (cgm != null) {
@@ -308,7 +311,7 @@ internal class ServerMessageReceiver(
                                     if (cgm.id == serverMessageController.clientId) {
                                         if (cgm.notes == ServerMessageController.FB_MSG) {
                                             // 处理反馈信息
-                                            println("Log: 【接收反馈】1:客户端收到了消息。")
+                                            Log.i(TAG, "Log: 【接收反馈】1:客户端收到了消息。")
                                             tsviewModel.cleanEditText()
                                         } else {
                                             val text = StringBuilder()
@@ -317,7 +320,7 @@ internal class ServerMessageReceiver(
                                             }
                                             // 反馈客户端 注意：仅代表服务端收到信息
                                             serverMessageController.messageFeedBack()
-                                            println(
+                                            Log.i(TAG, 
                                                 "Log: 【接收】JSON <== " + serverMessageController.clientIP
                                                         + "(" + serverMessageController.clientId + ") <- " + text
                                             )
@@ -333,7 +336,7 @@ internal class ServerMessageReceiver(
                                         }
                                     } else {
                                         // 丢弃的常规通讯信息
-                                        println("Log: 【丢弃】1:Drop id message (json mode) : $cgm")
+                                        Log.i(TAG, "Log: 【丢弃】1:Drop id message (json mode) : $cgm")
                                     }
                                 }
                             }
@@ -342,23 +345,24 @@ internal class ServerMessageReceiver(
                         }
                     }
                 } else if (receiverTransmissionMode == 2) {
-                    println("Log: 服务端进入Object传输模式")
+                    Log.i(TAG, "Log: 服务端进入Object传输模式")
                     // 传输对象 传输对象的时候已经进入正常通信了
                     // -2 表示连接断开了 只有服务在运行、客户端没断开才会继续监听
                     // 断开操作在TextSendMain中实现 这里已经解密成明文GM了
                     val readBuf = ByteArray(1024)
                     // 用于记录上次的值
                     var chunk: ByteArray? = null
+                    var readLength: Int
                     // 读取对象字节数组并反序列化
-                    while (receiverTransmissionMode == 2 && bufferedInputStream!!.read(readBuf) != -1) {
+                    while ((bufferedInputStream!!.read(readBuf).also { readLength = it } != -1) && receiverTransmissionMode == 2) {
                         // 如果服务停止
                         if (serverMessageController.connectionStat == -2 && !viewModel.uiState.value.serverRunning) {
                             break
                         }
                         chunk = if (chunk == null) {
-                            readBuf.clone()
+                            readBuf.copyOfRange(0, readLength)
                         } else {
-                            mergeArrays(chunk, readBuf)
+                            mergeArrays(chunk, readBuf.copyOfRange(0, readLength))
                         }
                         // 和上一次的值合并,检查是否到达了结束标记
                         if (bendsWith(chunk, Constant.endMarker)) {
@@ -370,7 +374,7 @@ internal class ServerMessageReceiver(
                                 if (cgm.id == serverMessageController.clientId) {
                                     if (cgm.notes == ServerMessageController.FB_MSG) {
                                         // 处理反馈信息
-                                        println("Log: 【接收反馈】2:客户端收到了消息。")
+                                        Log.i(TAG, "Log: 【接收反馈】2:客户端收到了消息。")
                                         tsviewModel.cleanEditText()
                                     } else {
                                         val text = StringBuilder()
@@ -379,7 +383,7 @@ internal class ServerMessageReceiver(
                                         }
                                         // 反馈客户端 注意：仅代表服务端收到信息
                                         serverMessageController.messageFeedBack()
-                                        println(
+                                        Log.i(TAG, 
                                             "Log: 【接收】OBJECT <== : " + serverMessageController.clientIP
                                                     + "(" + serverMessageController.clientId + ") <- " + text
                                         )
@@ -395,7 +399,7 @@ internal class ServerMessageReceiver(
                                     }
                                 } else {
                                     // 丢弃的常规通讯信息
-                                    println("Log: 【丢弃】2:Drop id message (object mode) : $cgm")
+                                    Log.i(TAG, "Log: 【丢弃】2:Drop id message (object mode) : $cgm")
                                 }
                                 chunk = null
                             }
@@ -406,16 +410,16 @@ internal class ServerMessageReceiver(
                 }
                 count++
                 if (count > 10) {
-                    println("Log: Count 10 次，结束Socket。")
+                    Log.i(TAG, "Log: Count 10 次，结束Socket。")
                     break
                 }
             }
-            println("Log: Socket has ended.")
+            Log.i(TAG, "Log: Socket has ended.")
             serverMessageController.connectionStat = -1
             tsviewModel.update(null, null, false, null, null, null, null)
         } catch (e: java.lang.Exception) {
             // 出错断开当前连接
-            println("ServerMessageReceiverError: ")
+            Log.i(TAG, "ServerMessageReceiverError: ")
             e.printStackTrace()
             // 直接设置状态-2 会在finally中结束当前Socket
             serverMessageController.connectionStat = -2
