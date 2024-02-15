@@ -4,7 +4,7 @@
  - 安卓版本：8.0+
  - 电脑服务端传送门：[Gitee](https://gitee.com/rmshadows/TextSend_Desktop)   [Github](https://github.com/rmshadows/TextSend_Desktop)
  - uTools插件传送门：[Github](https://github.com/rmshadows/TextSend_Utool)
- - 当前版本：4.0.4
+ - 当前版本：4.0.5
 
 >注意：说明文档虽然是旧的，但是大致用法没变。
 
@@ -66,6 +66,9 @@
 
 ### 更新日志
 
+- 2024.2.15——4.0.5
+  - 修复了服务端端口号无法更改的bug
+  
 - 2024.2.10——4.0.4
   - 修复了Object模式下接收器首次接收失效的bug
   - 修复了Object模式下接收器出现信息冗余问题
