@@ -11,8 +11,8 @@ android {
         applicationId = "cn.rmshadows.textsend"
         minSdk = 28
         targetSdk = 34
-        versionCode = 1
-        versionName = "4.0.5"
+        versionCode = 5
+        versionName = "5.0.6"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

@@ -1,5 +1,8 @@
 package cn.rmshadows.textsend.fragments
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
@@ -25,7 +28,7 @@ import cn.rmshadows.textsend.viewmodels.ServerFragmentViewModel
 import cn.rmshadows.textsend.viewmodels.TextsendViewModel
 import com.king.zxing.util.CodeUtils
 import kotlinx.coroutines.launch
-import utils.IPAddressFilter
+import protocol.TsUri
 import java.util.LinkedList
 
 
@@ -36,6 +39,8 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
     InputIpAddressDialogFragment.OnInputIpReceived {
     private var _binding: FragmentServerBinding? = null
     private var onceCreate = true
+    private var spinnerIps: List<String>? = null
+    private var spinnerPrefer: String? = null
 
     // This property is only valid between onCreateView and
     // onDestroyView.
@@ -78,15 +83,21 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
             repeatOnLifecycle(Lifecycle.State.STARTED) {
 //            repeatOnLifecycle(viewLifecycleOwner.lifecycle.currentState) {
                 viewModel.uiState.collect {
+                    if (_binding == null) {
+                        return@collect
+                    }
+                    if (it.listenError.isNotEmpty()) {
+                        Toast.makeText(context, it.listenError, Toast.LENGTH_LONG).show()
+                        viewModel.update(null, null, null, null, null, null, null, null, "")
+                    }
                     // 更新二维码
-                    if (it.serverRunning) {
-                        val tc: String = if(IPAddressFilter.getIpType(it.preferIpAddr) == 2){
-                            // ipv6
-                            "[${it.preferIpAddr}]:${it.serverListenPort}"
-                        }else{
-                            "${it.preferIpAddr}:${it.serverListenPort}"
-                        }
-                        binding.qrImageView.setImageBitmap(generateQRCode(tc))
+                    if (it.serverRunning && it.pskB64.isNotEmpty()) {
+                        val uri = TsUri.format(
+                            it.preferIpAddr,
+                            it.serverListenPort.toInt(),
+                            it.pskB64
+                        )
+                        binding.qrImageView.setImageBitmap(generateQRCode(uri))
                     } else {
                         val bitmap =
                             ResourcesCompat.getDrawable(resources, R.mipmap.ic_textsend, null)
@@ -109,14 +120,27 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                         }
                     }
                     // 更新下拉框
-                    binding.showPortTextView.text = it.serverListenPort
-                    adapter = updateSpinnerAdapter(viewModel.uiState.value.netIps)
-                    binding.ipPortSpinner.adapter = adapter
-                    binding.ipPortSpinner.setSelection(
-                        viewModel.uiState.value.netIps.indexOf(
-                            viewModel.uiState.value.preferIpAddr
-                        )
+                    binding.showPortTextView.text = if (it.serverRunning && it.pin.isNotEmpty()) {
+                        "${it.serverListenPort}  PIN ${it.pin}"
+                    } else {
+                        "端口 ${it.serverListenPort}"
+                    }
+                    binding.serverTextView.setText(
+                        if (it.serverRunning) R.string.server_copy_hint
+                        else R.string.server_port_hint
                     )
+                    val ips = it.netIps
+                    val prefer = it.preferIpAddr
+                    if (ips !== spinnerIps || prefer != spinnerPrefer) {
+                        spinnerIps = ips
+                        spinnerPrefer = prefer
+                        adapter = updateSpinnerAdapter(ips)
+                        binding.ipPortSpinner.adapter = adapter
+                        val idx = ips.indexOf(prefer)
+                        if (idx >= 0) {
+                            binding.ipPortSpinner.setSelection(idx)
+                        }
+                    }
                 }
             }
         }
@@ -126,7 +150,10 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
 
         // 下拉框选择IP
         binding.ipPortSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>, view: View, pos: Int, id: Long) {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
+                if (_binding == null || parent == null || pos < 0) {
+                    return
+                }
                 if (parent.getItemAtPosition(pos).toString() == viewModel.CUSTOM_INPUT_FLAG) {
                     // 自定义修改IP
                     val df = InputIpAddressDialogFragment()
@@ -181,23 +208,83 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                 // 停止服务
                 viewModel.stopServer(tsviewModel, viewModel)
             } else {
-                // 启动服务
-                viewModel.update(null, null, null, true, null, 0)
-                // 显示二维码de操作在UI界面
                 viewModel.startServer(tsviewModel, viewModel)
             }
         }
 
         binding.serverStartBtn.setOnLongClickListener {
-            if(! viewModel.uiState.value.serverRunning){
-                // 长按修改端口号
-                val df = InputPortNumberDialogFragment()
-                // 传入接口实现
-                df.setOnInputListener(this)
-                df.show(childFragmentManager, InputPortNumberDialogFragment.TAG)
+            if (!viewModel.uiState.value.serverRunning) {
+                showPortDialog()
             }
             true
         }
+
+        binding.showPortTextView.setOnClickListener {
+            if (viewModel.uiState.value.serverRunning) {
+                copyPinUri()
+            } else {
+                showPortDialog()
+            }
+        }
+        binding.showPortTextView.setOnLongClickListener {
+            if (viewModel.uiState.value.serverRunning) {
+                copyPinOnly()
+            } else {
+                showPortDialog()
+            }
+            true
+        }
+        binding.qrImageView.setOnClickListener {
+            copyPskUri()
+        }
+    }
+
+    private fun showPortDialog() {
+        val df = InputPortNumberDialogFragment()
+        df.setOnInputListener(this)
+        df.show(childFragmentManager, InputPortNumberDialogFragment.TAG)
+    }
+
+    private fun copyPinUri() {
+        val st = viewModel.uiState.value
+        if (!st.serverRunning || st.pin.isEmpty()) {
+            return
+        }
+        if (st.preferIpAddr.isBlank() || st.preferIpAddr == viewModel.CUSTOM_INPUT_FLAG) {
+            showCopyToast("请先选择局域网 IP")
+            return
+        }
+        copyText(TsUri.format(st.preferIpAddr, st.serverListenPort.toInt(), st.pin), "已复制 PIN 连接串")
+    }
+
+    private fun copyPinOnly() {
+        val pin = viewModel.uiState.value.pin
+        if (pin.isEmpty()) {
+            return
+        }
+        copyText(pin, "已复制 PIN")
+    }
+
+    private fun copyPskUri() {
+        val st = viewModel.uiState.value
+        if (!st.serverRunning || st.pskB64.isEmpty()) {
+            return
+        }
+        if (st.preferIpAddr.isBlank() || st.preferIpAddr == viewModel.CUSTOM_INPUT_FLAG) {
+            showCopyToast("请先选择局域网 IP")
+            return
+        }
+        copyText(TsUri.format(st.preferIpAddr, st.serverListenPort.toInt(), st.pskB64), "已复制密钥连接串")
+    }
+
+    private fun copyText(text: String, toast: String) {
+        val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        cm.setPrimaryClip(ClipData.newPlainText("textsend", text))
+        showCopyToast(toast)
+    }
+
+    private fun showCopyToast(text: String) {
+        Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
     }
 
     /**

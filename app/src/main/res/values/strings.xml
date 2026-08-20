@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Textsend</string>
     <string name="app_name_full">Textsend for Android</string>
-    <string name="app_version">4.0.5</string>
+    <string name="app_version">5.0.6</string>
     <string name="app_Author">Ryan Yim</string>
     <string name="app_License">GPLv3</string>
     <string name="github">https://github.com/rmshadows/TextSend_Android</string>
@@ -10,6 +10,7 @@
     <string name="action_switchToServer">切换服务端</string>
     <string name="action_switchToClient">切换客户端</string>
     <string name="action_about">关于</string>
+    <string name="action_settings">设置</string>
     <string name="action_quit">退出</string>
     <!-- Strings used for fragments for navigation -->
     <string name="client_fragment_label">Textsend 客户端</string>
@@ -17,12 +18,14 @@
     <string name="message_fragment_label">Textsend for Android</string>
     <string name="qrcode_fragment_label">Textsend QR Code</string>
     <!--  客户端连接  -->
-    <string name="client_hint">Connect to Textsend for Desktop</string>
-    <string name="client_ip_addr_prefix">192.168.1.</string>
-    <string name="client_ip_addr_hint">IPv4地址</string>
-    <string name="client_port_hint">端口号</string>
+    <string name="client_hint">填 IP、端口、PIN 或长密钥。可粘贴 ts://，扫码会自动填入（请确认 IP 与电脑同一网段）。</string>
+    <string name="client_ip_addr_prefix">192.168.</string>
+    <string name="client_ip_addr_hint">电脑 IP</string>
+    <string name="client_port_hint">端口（默认 54300）</string>
     <string name="client_port_default">54300</string>
+    <string name="client_pin_hint">8 位 PIN 或长密钥</string>
     <string name="client_connect_btn">连接</string>
+    <string name="client_paste_btn">粘贴 ts://</string>
     <string name="content_description">扫描二维码</string>
 
     <!--  消息发送  -->
@@ -36,7 +39,14 @@
     <string name="server_start_btn">启动服务</string>
     <string name="server_stop_btn">停止服务</string>
     <string name="server_content_description">二维码图片</string>
+    <string name="server_copy_hint">点 PIN 复制连接串 · 长按复制 PIN · 点二维码复制密钥</string>
+    <string name="server_port_hint">点端口号可修改（默认 54300）</string>
 
+    <string name="settings_fragment_label">设置</string>
+    <string name="settings_keepalive">后台保活</string>
+    <string name="settings_keepalive_hint">默认关闭。打开后，连接或服务运行期间会显示常驻通知，降低被系统杀掉的概率。</string>
+    <string name="keepalive_channel">连接保活</string>
+    <string name="keepalive_notification">正在保持连接</string>
 
     <!--  服务端信息输入对话框  -->
     <string name="server_input_edittext">请输入...</string>

@@ -56,6 +56,14 @@ class MainActivity : AppCompatActivity() {
                 true
             }
 
+            R.id.action_settings -> {
+                val navController = findNavController(R.id.nav_host_fragment_content_main)
+                if (navController.currentDestination?.id != R.id.settingsFragment) {
+                    navController.navigate(R.id.action_global_to_settings)
+                }
+                true
+            }
+
             R.id.action_about -> {
                 // 如果使用HTMLL:
                 val alertDialogBuilder: AlertDialog.Builder = AlertDialog.Builder(this)

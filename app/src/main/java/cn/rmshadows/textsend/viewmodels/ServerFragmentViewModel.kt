@@ -5,7 +5,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import utils.SocketDeliver
+import cn.rmshadows.textsend.KeepAlive
+import protocol.PairingMaterial
+import protocol.TsServer
 import java.net.InetAddress
 import java.net.NetworkInterface
 import java.util.Collections
@@ -13,30 +15,24 @@ import java.util.LinkedList
 
 
 data class ServerState(
-    // 猜测的IP地址
-    val preferIpAddr: String = "127.0.0.1",
-    // 服务运行的端口号
+    val preferIpAddr: String = "",
     val serverListenPort: String = "54300",
-    // IP列表
     val netIps: LinkedList<String> = LinkedList<String>(),
-    // 服务端服务是否正在运行
     val serverRunning: Boolean = false,
-    // 客户端最大链接数量
     val maxConnection: Number = 1,
-    // 已连接用户数
-    val clientCount:Number = 0
+    val clientCount: Number = 0,
+    val pin: String = "",
+    val pskB64: String = "",
+    val listenError: String = ""
 )
 
 
-/**
- * 注意：ViewModel 通常不应引用视图、Lifecycle 或可能存储对 activity 上下文的引用的任何类。由于 ViewModel 的生命周期大于界面的生命周期，因此在 ViewModel 中保留与生命周期相关的 API 可能会导致内存泄漏。
- */
 class ServerFragmentViewModel : ViewModel() {
-    // Expose screen UI state
     private val _uiState = MutableStateFlow(ServerState())
     val uiState: StateFlow<ServerState> = _uiState.asStateFlow()
 
     val CUSTOM_INPUT_FLAG = "手动指定..."
+    private var serverGen = 0
 
     fun update(
         preferIpAddrVal: String?,
@@ -44,84 +40,115 @@ class ServerFragmentViewModel : ViewModel() {
         netIpsVal: LinkedList<String>?,
         serverRunningVal: Boolean?,
         maxConnectionVal: Number?,
-        clientCountVal:Number?
+        clientCountVal: Number?,
+        pinVal: String? = null,
+        pskB64Val: String? = null,
+        listenErrorVal: String? = null
     ) {
         _uiState.update { currentState ->
-//            Log.d(TAG, "sfupdate: ${preferIpAddrVal}, ${serverListenPortVal}, ${netIpsVal}" +
-//                    ", ${serverRunningVal}, ${maxConnectionVal}")
             currentState.copy(
                 preferIpAddr = preferIpAddrVal ?: currentState.preferIpAddr,
                 serverListenPort = serverListenPortVal ?: currentState.serverListenPort,
                 netIps = netIpsVal ?: currentState.netIps,
                 serverRunning = serverRunningVal ?: currentState.serverRunning,
                 maxConnection = maxConnectionVal ?: currentState.maxConnection,
-                clientCount = clientCountVal ?:currentState.clientCount
+                clientCount = clientCountVal ?: currentState.clientCount,
+                pin = pinVal ?: currentState.pin,
+                pskB64 = pskB64Val ?: currentState.pskB64,
+                listenError = listenErrorVal ?: currentState.listenError
             )
         }
     }
 
-    /**
-     * 打印网卡IP并返回可能的局域网IP
-     */
     fun getDeviceIP() {
-        val ipAddr = LinkedList<String>()
+        val lan = LinkedList<String>()
+        val junk = LinkedList<String>()
         val interfaces: List<NetworkInterface> =
             Collections.list(NetworkInterface.getNetworkInterfaces())
         for (intf in interfaces) {
             val addrs: List<InetAddress> = Collections.list(intf.inetAddresses)
             for (addr in addrs) {
-//                if (addr is Inet4Address) { // !addr.isLoopbackAddress &&
-//                    addr.getHostAddress()?.let { ip_addr.add(it) }
-//                }
-                // 添加IPv6支持
-                addr.hostAddress?.let { ipAddr.add(it) }
+                if (addr.isAnyLocalAddress || addr.isMulticastAddress) {
+                    continue
+                }
+                val host = addr.hostAddress?.split("%")?.get(0) ?: continue
+                val bucket = if (isJunkHost(addr, host)) junk else lan
+                if (!bucket.contains(host)) {
+                    bucket.add(host)
+                }
             }
         }
         var preferIp: String? = null
         var find172 = false
-//        netIps.value = ip_addr
-        // 添加自定义条目
+        for (ip in lan) {
+            if (ip.startsWith("192.168")) {
+                preferIp = ip
+                break
+            } else if (ip.startsWith("172.")) {
+                preferIp = ip
+                find172 = true
+            } else if (ip.startsWith("10.") && !find172) {
+                preferIp = ip
+            }
+        }
+        if (preferIp == null && lan.isNotEmpty()) {
+            preferIp = lan.first
+        }
+        val ipAddr = LinkedList<String>()
+        ipAddr.addAll(lan)
+        ipAddr.addAll(junk)
         ipAddr.add(CUSTOM_INPUT_FLAG)
-        for (ip in ipAddr) {
-            try {
-                if (ip.startsWith("192.168")) {
-                    preferIp = ip
-                    break
-                } else if (ip.startsWith("172.")) {
-                    preferIp = ip
-                    find172 = true
-                } else if (ip.startsWith("10.")) {
-                    if (!find172) {
-                        preferIp = ip
-                    }
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-        println("请在您的TextSend安卓客户端中输入手机与电脑同在的局域网的IPv4地址(不出问题的话上面应该有你需要的IP)。")
+        println("请选择与对端同一局域网的 IP。127.0.0.1 / fe80 / 169.254 仍在列表末尾，默认不选。")
         if (preferIp != null) {
-            if (preferIp.startsWith("192.168")) {
-                System.out.printf(
-                    "猜测您当前的局域网IP是：%s ，具体请根据实际情况进行选择。%n",
-                    preferIp
-                )
-            } else {
-                System.out.printf(
-                    "未能猜测到您当前的局域网IP，将使用：%s 作为启动二维码地址！具体可将实际IP填入文本框后启动!%n",
-                    preferIp
-                )
-            }
+            System.out.printf("猜测局域网 IP：%s%n", preferIp)
         }
-//        return prefer_ip
-        update(preferIp, null, ipAddr, null, null, null)
+        update(preferIp ?: "", null, ipAddr, null, null, null)
+    }
+
+    /** 回环、链路本地：列表里留着，不当默认 */
+    private fun isJunkHost(addr: InetAddress, raw: String): Boolean {
+        if (addr.isLoopbackAddress || addr.isLinkLocalAddress) {
+            return true
+        }
+        if (raw.equals("127.0.0.1", ignoreCase = true) || raw == "::1") {
+            return true
+        }
+        return raw.startsWith("fe80", ignoreCase = true) || raw.startsWith("169.254")
     }
 
     fun startServer(tsviewModel: TextsendViewModel, viewModel: ServerFragmentViewModel) {
-        Thread(SocketDeliver(tsviewModel, viewModel)).start()
+        serverGen++
+        val gen = serverGen
+        TsServer.stopCurrent()
+        val material = PairingMaterial.generate()
+        val port = uiState.value.serverListenPort.toInt()
+        val maxConn = uiState.value.maxConnection.toInt()
+        update(null, null, null, true, null, 0, material.pin, material.pskB64, "")
+        KeepAlive.sessionActive = true
+        val server = TsServer(port, maxConn, material, { count ->
+            if (gen == serverGen) {
+                viewModel.update(null, null, null, null, null, count)
+                tsviewModel.update(null, null, count > 0, null, null, null, null)
+            }
+        }, { text ->
+            if (gen == serverGen) {
+                tsviewModel.update(null, null, null, null, null, text, null)
+            }
+        }, { err ->
+            if (gen == serverGen) {
+                viewModel.update(null, null, null, false, null, 0, "", "", err ?: "")
+                tsviewModel.update(null, null, false, null, null, null, -1)
+                KeepAlive.sessionActive = false
+            }
+        })
+        Thread(server, "ts-server").start()
     }
 
     fun stopServer(tsviewModel: TextsendViewModel, viewModel: ServerFragmentViewModel) {
-        SocketDeliver.stopSocketDeliver(tsviewModel, viewModel)
+        serverGen++
+        TsServer.stopCurrent()
+        viewModel.update(null, null, null, false, null, 0, "", "", "")
+        tsviewModel.update(null, null, false, null, null, null, -1)
+        KeepAlive.sessionActive = false
     }
 }

@@ -1,5 +1,7 @@
 package cn.rmshadows.textsend.fragments
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -25,6 +27,8 @@ import kotlinx.coroutines.launch
 class ClientFragment : Fragment() {
     private var _binding: FragmentClientBinding? = null
     private var toast: Toast? = null
+    private var appliedFillSeq = -1
+    private var appliedErrorSeq = 0
 
     // This property is only valid between onCreateView and onDestroyView.
     private val binding get() = _binding!!
@@ -39,33 +43,30 @@ class ClientFragment : Fragment() {
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.uiState.collect {
-                    tsviewModel.uiState.collect {
-                        // 要求客户端模式才运行！！！
-                        if(! it.isServerMode){
-                            // 已连接才会跳转
-                            if(it.isClientConnected){
-                                findNavController().navigate(R.id.action_ClientFragment_to_messengerFragment)
-                            }
-                            if(it.connectionStat == -2){
-                                binding.buttonConnect.text = "正在连接..."
-                            }else{
-                                binding.buttonConnect.text = "连接"
-                            }
+                tsviewModel.uiState.collect {
+                    if (it.isServerMode) {
+                        return@collect
+                    }
+                    if (it.isClientConnected) {
+                        val dest = findNavController().currentDestination?.id
+                        if (dest == R.id.ClientFragment) {
+                            findNavController().navigate(R.id.action_ClientFragment_to_messengerFragment)
                         }
+                    }
+                    if (_binding != null) {
+                        binding.buttonConnect.text = if (it.connectionStat == -2) "正在连接..." else "连接"
                     }
                 }
             }
         }
 
-        // 获取二维码扫描值 Use the Kotlin extension in the fragment-ktx artifact. QRCODE是识别符
         setFragmentResultListener("QRCODE") { _, bundle ->
-            // We use a String here, but any type that can be put in a Bundle is supported. key是ScanResult
             val result = bundle.getString("ScanResult")
-            // Do something with the result.
             val error = viewModel.qrScanResult(result.toString())
             if (error != null) {
                 showToast(error)
+            } else {
+                showToast("已填入 IP / 端口 / 密钥，请确认 IP 后点连接")
             }
         }
     }
@@ -78,11 +79,23 @@ class ClientFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.uiState.collect {
-                    // 客户端模式才运行
-                    if(!tsviewModel.uiState.value.isServerMode){
-                        binding.clientIpAddress.setText(it.serverIp)
-                        binding.clientPort.setText(it.serverPort.toString())
+                    if (tsviewModel.uiState.value.isServerMode) {
+                        return@collect
                     }
+                    if (it.errorSeq != appliedErrorSeq) {
+                        appliedErrorSeq = it.errorSeq
+                        val err = it.lastError
+                        if (!err.isNullOrBlank()) {
+                            showToast(err)
+                        }
+                    }
+                    if (it.fillSeq == appliedFillSeq) {
+                        return@collect
+                    }
+                    appliedFillSeq = it.fillSeq
+                    binding.clientIpAddress.setText(it.serverIp)
+                    binding.clientPort.setText(it.serverPort.toString())
+                    binding.clientPin.setText(it.keyMaterial)
                 }
             }
         }
@@ -92,24 +105,41 @@ class ClientFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // 客户端连接
+        binding.buttonPaste.setOnClickListener {
+            val text = readClipboard()
+            if (text.isNullOrBlank()) {
+                showToast("剪贴板是空的")
+                return@setOnClickListener
+            }
+            val err = viewModel.applyRaw(text)
+            if (err != null) {
+                showToast(err)
+            } else {
+                showToast("已从连接串填入，请确认 IP 后点连接")
+            }
+        }
+
         binding.buttonConnect.setOnClickListener {
-            viewModel.update(binding.clientIpAddress.text.toString(), binding.clientPort.text.toString().toInt())
-            if(tsviewModel.uiState.value.connectionStat == -1){
-                viewModel.startClient(tsviewModel)
-            }else{
+            viewModel.applyFields(
+                binding.clientIpAddress.text.toString(),
+                binding.clientPort.text.toString().toIntOrNull() ?: 54300,
+                binding.clientPin.text.toString()
+            )
+            if (tsviewModel.uiState.value.connectionStat == -1) {
+                val err = viewModel.startClient(tsviewModel)
+                if (err != null) {
+                    showToast(err)
+                }
+            } else {
                 viewModel.stopClient(tsviewModel)
             }
         }
 
-        // 长按重置输入框
         binding.buttonConnect.setOnLongClickListener {
             viewModel.resetInput()
-            // 返回true消耗点击
             true
         }
 
-        // 跳转扫描二维码界面
         binding.fab.setOnClickListener {
             findNavController().navigate(R.id.action_ClientFragment_to_qrScannerFragment)
         }
@@ -118,6 +148,15 @@ class ClientFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         _binding = null
+    }
+
+    private fun readClipboard(): String? {
+        val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = cm.primaryClip ?: return null
+        if (clip.itemCount < 1) {
+            return null
+        }
+        return clip.getItemAt(0).coerceToText(requireContext())?.toString()
     }
 
     private fun showToast(text: String) {

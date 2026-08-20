@@ -1,121 +1,176 @@
 package cn.rmshadows.textsend.viewmodels
 
-import ScheduleTask.ScheduleTask
 import android.util.Log
 import androidx.lifecycle.ViewModel
+import cn.rmshadows.textsend.KeepAlive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import utils.ClientMessageController
+import protocol.TsClient
+import protocol.TsPeer
+import protocol.TsUri
 import utils.Constant.Companion.TAG
-import utils.IPAddressFilter
+import java.net.ConnectException
 import java.net.InetSocketAddress
 import java.net.Socket
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
 
 
 data class ClientState(
-    // 服务端IP
-    val serverIp:String = "192.168.1.",
-    // 服务端端口
-    val serverPort:Number = 54300
+    val serverIp: String = "192.168.",
+    val serverPort: Int = 54300,
+    /** 8 位 PIN 或扫码/粘贴得到的长密钥 */
+    val keyMaterial: String = "",
+    /** 扫码 / 粘贴 / 重置时 +1，界面只在这时回填，避免盖住用户改 IP */
+    val fillSeq: Int = 0,
+    /** 连接失败时 +1，界面弹短提示 */
+    val errorSeq: Int = 0,
+    val lastError: String? = null
 )
 
 
-/**
- * 注意：ViewModel 通常不应引用视图、Lifecycle 或可能存储对 activity 上下文的引用的任何类。由于 ViewModel 的生命周期大于界面的生命周期，因此在 ViewModel 中保留与生命周期相关的 API 可能会导致内存泄漏。
- */
 class ClientFragmentViewModel : ViewModel() {
     private val _uiState = MutableStateFlow(ClientState())
     val uiState: StateFlow<ClientState> = _uiState.asStateFlow()
-    // 计时器停止信号
-    private val scheduleControl = AtomicBoolean(false)
 
-    fun update(
-        serverIpVal: String?,
-        serverPortVal: Number?
-    ) {
-        _uiState.update { currentState ->
-            currentState.copy(
-                serverIp = serverIpVal?:currentState.serverIp,
-                serverPort = serverPortVal?:currentState.serverPort
+    fun applyFields(ip: String, port: Int, secret: String) {
+        val uri = parseTs(ip) ?: parseTs(secret)
+        if (uri != null) {
+            applyUri(uri)
+            return
+        }
+        _uiState.update {
+            it.copy(
+                serverIp = ip.trim(),
+                serverPort = port,
+                keyMaterial = secret.trim()
             )
         }
     }
 
-    fun startClient(tsviewModel:TextsendViewModel) {
-        Thread {
-            try {
-                val clientSocket = Socket()
-                val sip = uiState.value.serverIp
-                val sport = uiState.value.serverPort
-                Log.i(TAG, "startClient: IP:${sip}, Port:${sport}")
-                clientSocket.connect(InetSocketAddress(sip, sport.toInt()), 5000)
-                // 如果连接成功
-                tsviewModel.update(null, null, true, null, null, null, 0)
-                Thread(ClientMessageController(clientSocket, tsviewModel)).start()
-                // 开始监视连接状况
-                scheduleControl.set(true)
-                // 监视连接断开就恢复按钮状态
-                Thread {
-                    // 周期任务
-                    val checkConnection = Runnable {
-                        // 如果断开连接
-                        if (!tsviewModel.uiState.value.isClientConnected) {
-                            stopClient(tsviewModel)
-                        }
-                        Log.d(TAG, "checkConnection检查客户端连接......")
-                    }
-                    // 运行周期任务，并在clientconnect未false时停止
-                    val scheduleTask = ScheduleTask(
-                        checkConnection,
-                        1,
-                        1,
-                        scheduleControl,
-                        TimeUnit.SECONDS
-                    )
-                    scheduleTask.startTask()
-                }.start()
-            } catch (e: Exception) {
-                // 连接失败
-                e.printStackTrace()
-                Log.i(TAG, "客户端连接失败。")
-                stopClient(tsviewModel)
-            }
-        }.start()
-    }
-
-    fun stopClient(tsviewModel:TextsendViewModel) {
-        ClientMessageController.closeClientSocket(tsviewModel)
-        scheduleControl.set(false)
-    }
-
-    /**
-     * 重置输入
-     */
-    fun resetInput(){
-        update("192.168.1.", 54300)
-    }
-
-    // 返回的是错误
-    fun qrScanResult(result:String) : String?{
-        // 设置扫描结果:二维码内容必须 IP+端口
-        if(IPAddressFilter.getIpType(result) != 5){
-            try {
-                val pair = IPAddressFilter.splitIpAndPort(result)
-                if(pair != null){
-                    update(pair.first, pair.second.toInt())
-                }else{
-                    return "请检查IP格式是否正确: $result"
-                }
-            }catch (e:Exception){
-                return "请检查二维码内容是否正确：$result"
-            }
-        }else{
-            return "不是有效的(IPv4/[Ipv6]:端口号) ：$result"
+    fun applyUri(uri: TsUri) {
+        _uiState.update {
+            it.copy(
+                serverIp = uri.host,
+                serverPort = uri.port,
+                keyMaterial = uri.k,
+                fillSeq = it.fillSeq + 1
+            )
         }
+    }
+
+    /** @return 错误信息；成功为 null */
+    fun applyRaw(raw: String): String? {
+        val uri = parseTs(raw) ?: return "剪贴板不是 ts:// 连接串"
+        applyUri(uri)
         return null
+    }
+
+    fun qrScanResult(result: String): String? {
+        val uri = parseTs(result) ?: return "请扫描新版 ts:// 二维码"
+        applyUri(uri)
+        return null
+    }
+
+    fun resetInput() {
+        _uiState.update {
+            ClientState(fillSeq = it.fillSeq + 1)
+        }
+    }
+
+    /** @return 立即失败时的错误信息；成功启动后台连接则 null */
+    fun startClient(tsviewModel: TextsendViewModel): String? {
+        val st = uiState.value
+        val k = st.keyMaterial.trim()
+        if (k.isEmpty()) {
+            return "请填 PIN 或长密钥，或粘贴 / 扫描 ts://"
+        }
+        val uri: TsUri
+        try {
+            uri = TsUri.parse(TsUri.format(st.serverIp.trim(), st.serverPort, k))
+        } catch (e: Exception) {
+            return e.message ?: "连接串无效"
+        }
+        tsviewModel.update(null, null, false, null, null, null, -2)
+        KeepAlive.sessionActive = true
+        TsClient.close()
+        TsClient.abort = false
+        Thread({
+            try {
+                Log.i(TAG, "startClient: ${uri.host}:${uri.port} mode=" + if (uri.pinMode) "PIN" else "PSK")
+                val sock = Socket()
+                TsClient.socket = sock
+                sock.connect(InetSocketAddress(uri.host, uri.port), 5000)
+                if (TsClient.abort) {
+                    sock.close()
+                    return@Thread
+                }
+                val peer = TsPeer(sock, uri, { msg -> Log.i(TAG, msg) }, {
+                    tsviewModel.update(null, null, true, null, null, null, 2)
+                }, {
+                    val reached = tsviewModel.uiState.value.isClientConnected
+                    TsClient.peer = null
+                    tsviewModel.update(null, null, false, null, null, null, -1)
+                    KeepAlive.sessionActive = false
+                    if (!reached && !TsClient.abort) {
+                        reportFail("握手失败，请确认 PIN 或密钥")
+                    }
+                }, { text ->
+                    tsviewModel.update(null, null, null, null, null, text, null)
+                })
+                TsClient.peer = peer
+                if (TsClient.abort) {
+                    peer.close()
+                    return@Thread
+                }
+                peer.run()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Log.i(TAG, "客户端连接失败: ${e.message}")
+                val aborted = TsClient.abort
+                TsClient.close()
+                tsviewModel.update(null, null, false, null, null, null, -1)
+                KeepAlive.sessionActive = false
+                if (!aborted) {
+                    reportFail(connectFailText(e))
+                }
+            }
+        }, "ts-client").start()
+        return null
+    }
+
+    fun stopClient(tsviewModel: TextsendViewModel) {
+        TsClient.close()
+        tsviewModel.update(null, null, false, null, null, null, -1)
+        KeepAlive.sessionActive = false
+    }
+
+    private fun reportFail(msg: String) {
+        _uiState.update {
+            it.copy(errorSeq = it.errorSeq + 1, lastError = msg)
+        }
+    }
+
+    private fun connectFailText(e: Exception): String {
+        return when (e) {
+            is SocketTimeoutException -> "连不上（超时），请确认 IP 和端口"
+            is ConnectException -> "连不上，请确认电脑已启动且同一网段"
+            is UnknownHostException -> "IP 无效"
+            else -> "连接失败: ${e.message ?: e.javaClass.simpleName}"
+        }
+    }
+
+    private fun parseTs(raw: String?): TsUri? {
+        if (raw.isNullOrBlank()) {
+            return null
+        }
+        val line = raw.trim().lineSequence().firstOrNull { it.isNotBlank() }?.trim() ?: return null
+        return try {
+            TsUri.parse(line)
+        } catch (_: Exception) {
+            null
+        }
     }
 }

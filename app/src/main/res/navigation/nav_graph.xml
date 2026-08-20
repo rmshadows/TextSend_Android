@@ -54,4 +54,12 @@
             android:id="@+id/action_qrScannerFragment_to_ClientFragment"
             app:destination="@id/ClientFragment" />
     </fragment>
+    <fragment
+        android:id="@+id/settingsFragment"
+        android:name="cn.rmshadows.textsend.fragments.SettingsFragment"
+        android:label="@string/settings_fragment_label"
+        tools:layout="@layout/fragment_settings" />
+    <action
+        android:id="@+id/action_global_to_settings"
+        app:destination="@id/settingsFragment" />
 </navigation>
