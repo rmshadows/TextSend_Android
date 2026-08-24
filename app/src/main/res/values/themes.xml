@@ -1,9 +1,152 @@
-<resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+<resources>
+    <!-- 默认：紫强调，跟随系统浅/深。 -->
     <style name="Base.Theme.Textsend" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <item name="colorPrimary">#5C00FF</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorPrimaryContainer">#EDE4FF</item>
+        <item name="colorOnPrimaryContainer">#2A006E</item>
+        <item name="colorSurfaceContainer">#F3EEFF</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="tsFieldStroke">#C4B0FF</item>
     </style>
 
     <style name="Theme.Textsend" parent="Base.Theme.Textsend" />
+
+    <!-- 暗色：近黑、中性灰，去掉默认紫。 -->
+    <style name="Theme.Textsend.Dark" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#E8EAED</item>
+        <item name="colorOnPrimary">#0C0C0D</item>
+        <item name="colorPrimaryContainer">#2A2B2E</item>
+        <item name="colorOnPrimaryContainer">#E8EAED</item>
+        <item name="colorSecondary">#A8ADB3</item>
+        <item name="colorOnSecondary">#0C0C0D</item>
+        <item name="colorSecondaryContainer">#2A2B2E</item>
+        <item name="colorOnSecondaryContainer">#E8EAED</item>
+        <item name="colorTertiary">#C4C7CC</item>
+        <item name="colorOnTertiary">#0C0C0D</item>
+        <item name="colorTertiaryContainer">#2A2B2E</item>
+        <item name="colorOnTertiaryContainer">#E8EAED</item>
+        <item name="android:colorBackground">#0C0C0D</item>
+        <item name="android:windowBackground">#0C0C0D</item>
+        <item name="colorOnBackground">#F2F2F3</item>
+        <item name="colorSurface">#0C0C0D</item>
+        <item name="colorOnSurface">#F2F2F3</item>
+        <item name="colorSurfaceVariant">#1C1D20</item>
+        <item name="colorOnSurfaceVariant">#A8ADB3</item>
+        <item name="colorOutline">#5C5E62</item>
+        <item name="colorOutlineVariant">#2E3033</item>
+        <item name="colorSurfaceContainerLowest">#080809</item>
+        <item name="colorSurfaceContainerLow">#121214</item>
+        <item name="colorSurfaceContainer">#161618</item>
+        <item name="colorSurfaceContainerHigh">#1C1D20</item>
+        <item name="colorSurfaceContainerHighest">#242528</item>
+        <item name="colorControlActivated">#E8EAED</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="tsFieldStroke">#3A3B3F</item>
+    </style>
+
+    <!-- 纸墨：暖纸底、墨色按钮。 -->
+    <style name="Theme.Textsend.Paper" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">#1A1A1A</item>
+        <item name="colorOnPrimary">#F6F4EF</item>
+        <item name="colorPrimaryContainer">#E8E4DB</item>
+        <item name="colorOnPrimaryContainer">#1A1A1A</item>
+        <item name="colorSecondary">#5C574E</item>
+        <item name="colorOnSecondary">#F6F4EF</item>
+        <item name="colorSecondaryContainer">#E8E4DB</item>
+        <item name="colorOnSecondaryContainer">#1A1A1A</item>
+        <item name="colorTertiary">#3F3B34</item>
+        <item name="colorOnTertiary">#F6F4EF</item>
+        <item name="colorTertiaryContainer">#E8E4DB</item>
+        <item name="colorOnTertiaryContainer">#1A1A1A</item>
+        <item name="android:colorBackground">#F6F4EF</item>
+        <item name="android:windowBackground">#F6F4EF</item>
+        <item name="colorOnBackground">#1A1A1A</item>
+        <item name="colorSurface">#F6F4EF</item>
+        <item name="colorOnSurface">#1A1A1A</item>
+        <item name="colorSurfaceVariant">#E8E4DB</item>
+        <item name="colorOnSurfaceVariant">#5C574E</item>
+        <item name="colorOutline">#B8B2A6</item>
+        <item name="colorOutlineVariant">#DDD8CE</item>
+        <item name="colorSurfaceContainerLowest">#FFFFFF</item>
+        <item name="colorSurfaceContainerLow">#FBF9F4</item>
+        <item name="colorSurfaceContainer">#FFFFFF</item>
+        <item name="colorSurfaceContainerHigh">#EFEBE3</item>
+        <item name="colorSurfaceContainerHighest">#E8E4DB</item>
+        <item name="colorControlActivated">#1A1A1A</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="tsFieldStroke">#C9C3B6</item>
+    </style>
+
+    <!-- 石板：深蓝灰底、冷靛蓝。 -->
+    <style name="Theme.Textsend.Slate" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#9DB4FF</item>
+        <item name="colorOnPrimary">#0B1020</item>
+        <item name="colorPrimaryContainer">#243056</item>
+        <item name="colorOnPrimaryContainer">#D6E0FF</item>
+        <item name="colorSecondary">#9AA4C2</item>
+        <item name="colorOnSecondary">#0B1020</item>
+        <item name="colorSecondaryContainer">#243056</item>
+        <item name="colorOnSecondaryContainer">#D6E0FF</item>
+        <item name="colorTertiary">#B8C4E8</item>
+        <item name="colorOnTertiary">#0B1020</item>
+        <item name="colorTertiaryContainer">#243056</item>
+        <item name="colorOnTertiaryContainer">#D6E0FF</item>
+        <item name="android:colorBackground">#0B0E14</item>
+        <item name="android:windowBackground">#0B0E14</item>
+        <item name="colorOnBackground">#E8EAF0</item>
+        <item name="colorSurface">#0B0E14</item>
+        <item name="colorOnSurface">#E8EAF0</item>
+        <item name="colorSurfaceVariant">#151A24</item>
+        <item name="colorOnSurfaceVariant">#9AA4C2</item>
+        <item name="colorOutline">#3A4256</item>
+        <item name="colorOutlineVariant">#232836</item>
+        <item name="colorSurfaceContainerLowest">#07090E</item>
+        <item name="colorSurfaceContainerLow">#10141C</item>
+        <item name="colorSurfaceContainer">#151A24</item>
+        <item name="colorSurfaceContainerHigh">#1C2230</item>
+        <item name="colorSurfaceContainerHighest">#243056</item>
+        <item name="colorControlActivated">#9DB4FF</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="tsFieldStroke">#2A3142</item>
+    </style>
+
+    <style name="Widget.Textsend.Button" parent="Widget.Material3.Button">
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:minHeight">@dimen/ts_btn</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="cornerRadius">10dp</item>
+    </style>
+
+    <style name="Widget.Textsend.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:minHeight">@dimen/ts_btn</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="cornerRadius">10dp</item>
+    </style>
+
+    <style name="TextAppearance.Textsend.Hint" parent="TextAppearance.Material3.BodySmall">
+        <item name="android:textSize">11sp</item>
+        <item name="android:lineSpacingMultiplier">1.15</item>
+        <item name="android:textColor">?android:attr/textColorSecondary</item>
+    </style>
+
+    <style name="Widget.Textsend.Button.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:minHeight">32dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+    </style>
 </resources>
+

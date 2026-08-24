@@ -6,7 +6,6 @@ import android.text.InputType
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.widget.EditText
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
@@ -59,15 +58,6 @@ class InputPortNumberDialogFragment : DialogFragment() {
     // 接收从Fragment中传过来的接口实现
     fun setOnInputListener(listener: OnInputPortReceived) {
         onInputReceived = listener
-    }
-
-
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.fragment_input_dialog, container, false)
     }
 
     companion object {

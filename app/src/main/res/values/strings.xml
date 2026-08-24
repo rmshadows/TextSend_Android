@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Textsend</string>
     <string name="app_name_full">Textsend for Android</string>
-    <string name="app_version">5.0.6</string>
+    <string name="app_version">5.0.10</string>
     <string name="app_Author">Ryan Yim</string>
     <string name="app_License">GPLv3</string>
     <string name="github">https://github.com/rmshadows/TextSend_Android</string>
@@ -21,6 +21,7 @@
     <string name="client_hint">填 IP、端口、PIN 或长密钥。可粘贴 ts://，扫码会自动填入（请确认 IP 与电脑同一网段）。</string>
     <string name="client_ip_addr_prefix">192.168.</string>
     <string name="client_ip_addr_hint">电脑 IP</string>
+    <string name="server_ip_label">本机地址</string>
     <string name="client_port_hint">端口（默认 54300）</string>
     <string name="client_port_default">54300</string>
     <string name="client_pin_hint">8 位 PIN 或长密钥</string>
@@ -30,6 +31,15 @@
 
     <!--  消息发送  -->
     <string name="messager_send_btn">发送</string>
+    <string name="messager_file_btn">文件</string>
+    <string name="messager_file_hint">短按打开相册多选，长按打开文件管理器多选</string>
+    <string name="about_help">&lt;b&gt;发文件&lt;/b&gt;&lt;br/&gt;短按「文件」打开相册，长按打开文件管理器。选完先进待发，点「发送」才传。大于 16MB 不拷缓存。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件夹&lt;/b&gt;&lt;br/&gt;长按「发送」，左边打勾可选多个。也可从文件管理器直接分享文件夹。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;接收&lt;/b&gt;&lt;br/&gt;文件在 下载/TextSend。图片也存文件，不进剪贴板。电脑发来的文件夹会按路径重建。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;取消和续传&lt;/b&gt;&lt;br/&gt;取消只停这一轮，待发还在。再发送会续上对面留下的半截。本地点取消「接收」会删半截。连续取消接收 3 次，冷却 10 秒。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;连不上&lt;/b&gt;&lt;br/&gt;先开飞行模式再开 Wi‑Fi，关掉网络加速/双通道。同一 Wi‑Fi，不要开 VPN。已连接时切到后台再分享，会回到当前会话。</string>
+    <string name="messager_cancel_btn">取消</string>
+    <string name="messager_pending_title">待发 %d（点发送才传）</string>
+    <string name="messager_pending_remove">从待发列表移除</string>
+    <string name="messager_pending_clear">清空</string>
+    <string name="messager_share_added">已加入待发列表，连上后到消息页点发送</string>
+    <string name="messager_share_added_connected">已加入待发列表，点发送才传</string>
     <string name="messager_edittext_hint">文字输入框</string>
     <string name="messager_label">Textsend for Android</string>
 
@@ -39,14 +49,66 @@
     <string name="server_start_btn">启动服务</string>
     <string name="server_stop_btn">停止服务</string>
     <string name="server_content_description">二维码图片</string>
-    <string name="server_copy_hint">点 PIN 复制连接串 · 长按复制 PIN · 点二维码复制密钥</string>
+    <string name="server_copy_hint">已自动复制长连接串。点 PIN 复制短连接串，长按只复制数字。</string>
     <string name="server_port_hint">点端口号可修改（默认 54300）</string>
 
     <string name="settings_fragment_label">设置</string>
-    <string name="settings_keepalive">后台保活</string>
-    <string name="settings_keepalive_hint">默认关闭。打开后，连接或服务运行期间会显示常驻通知，降低被系统杀掉的概率。</string>
+    <string name="settings_theme">外观</string>
+    <string name="settings_theme_hint">四个主题共用同一套排版，只换配色。</string>
+    <string name="settings_theme_default">默认</string>
+    <string name="settings_theme_default_desc">紫 · 跟随系统</string>
+    <string name="settings_theme_dark">暗色</string>
+    <string name="settings_theme_dark_desc">近黑 · 中性灰</string>
+    <string name="settings_theme_paper">纸墨</string>
+    <string name="settings_theme_paper_desc">暖纸 · 墨色</string>
+    <string name="settings_theme_slate">石板</string>
+    <string name="settings_theme_slate_desc">石板 · 靛蓝</string>
+    <string name="settings_keepalive">连接通知</string>
+    <string name="settings_keepalive_hint">连上后自动出通知，防止切到相册或后台时被掐断。关不掉。安卓 13+ 看不到通知就打开开关授权。</string>
+    <string name="settings_qr_auto">扫码后自动连接</string>
+    <string name="settings_qr_auto_hint">默认打开。扫到 ts:// 二维码后直接握手，不用再点连接。</string>
+    <string name="settings_cache_hint">小于 16MB 会拷到缓存，更大的直接读原文件。发送成功自动删；清除缓存会同时清空待发。</string>
+    <string name="settings_cache_size">发送缓存 %s</string>
+    <string name="settings_cache_clear">清除缓存</string>
+    <string name="settings_cache_cleared">已清除 %s</string>
+    <string name="settings_inbox">接收文件夹</string>
+    <string name="settings_inbox_hint">收到的文件在下载/%s。应用内可预览、删除。</string>
+    <string name="settings_inbox_open">打开文件夹</string>
+    <string name="settings_inbox_browse">应用内查看</string>
+    <string name="settings_inbox_chooser">选择文件管理器</string>
+    <string name="settings_inbox_manager_fail">系统文件管理器打不开，已改为应用内查看</string>
+    <string name="settings_inbox_copy">复制路径</string>
+    <string name="settings_inbox_copied">已复制路径\n%s</string>
+    <string name="settings_inbox_fail">无法打开接收文件夹</string>
+    <string name="settings_inbox_empty">还没有收到文件</string>
+    <string name="settings_inbox_dir_empty">这个文件夹是空的</string>
+    <string name="settings_inbox_up">返回上级</string>
+    <string name="settings_inbox_dir">文件夹</string>
+    <string name="settings_inbox_dir_count">文件夹 · %d 项</string>
+    <string name="settings_inbox_delete">删除</string>
+    <string name="settings_inbox_delete_confirm">删除 %s ？</string>
+    <string name="settings_inbox_delete_dir_confirm">删除文件夹 %s 及其中所有文件？</string>
+    <string name="settings_inbox_deleted">已删除</string>
+    <string name="settings_inbox_delete_fail">删除失败</string>
+    <string name="settings_inbox_clear">清空</string>
+    <string name="settings_inbox_clear_confirm">清空接收文件夹里的全部文件和子文件夹？此操作不能恢复。</string>
+    <string name="settings_inbox_cleared">已清空接收文件夹</string>
+    <string name="settings_inbox_clear_fail">部分文件未能删除</string>
+    <string name="settings_inbox_open_ext">用其他应用打开</string>
+    <string name="settings_inbox_no_preview">无法在应用内预览\n%1$s\n%2$s\n可点右上角用其他应用打开</string>
+    <string name="settings_help">帮助</string>
     <string name="keepalive_channel">连接保活</string>
     <string name="keepalive_notification">正在保持连接</string>
+
+    <string name="folder_pick_title">选择文件夹</string>
+    <string name="folder_pick_hint">点左边方框打勾，可一次勾几个。点名字进入下一级。隐藏目录（如 .logger）也会列出。</string>
+    <string name="folder_pick_current">选择当前文件夹</string>
+    <string name="folder_pick_done_idle">加入已勾选</string>
+    <string name="folder_pick_done">加入已勾选（%d）</string>
+    <string name="folder_pick_saf">系统选择器</string>
+    <string name="folder_pick_root">不能选整个存储根目录</string>
+    <string name="folder_pick_empty">这里看不到文件夹（安卓 11+ 常常列不全）。用下面的系统选择器，或先用文件管理器分享过来。</string>
+    <string name="folder_pick_dir_count">文件夹 · %d 项</string>
 
     <!--  服务端信息输入对话框  -->
     <string name="server_input_edittext">请输入...</string>

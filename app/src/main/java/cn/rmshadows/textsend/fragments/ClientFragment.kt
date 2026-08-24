@@ -15,11 +15,14 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
+import cn.rmshadows.textsend.KeepAlive
 import cn.rmshadows.textsend.R
 import cn.rmshadows.textsend.databinding.FragmentClientBinding
 import cn.rmshadows.textsend.viewmodels.ClientFragmentViewModel
 import cn.rmshadows.textsend.viewmodels.TextsendViewModel
 import kotlinx.coroutines.launch
+import protocol.TsClient
+import protocol.TsServer
 
 /**
  * A simple [Fragment] subclass as the default destination in the navigation.
@@ -29,6 +32,7 @@ class ClientFragment : Fragment() {
     private var toast: Toast? = null
     private var appliedFillSeq = -1
     private var appliedErrorSeq = 0
+    private var pendingQrAutoConnect = false
 
     // This property is only valid between onCreateView and onDestroyView.
     private val binding get() = _binding!!
@@ -38,8 +42,10 @@ class ClientFragment : Fragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         viewModel = ViewModelProvider(this)[ClientFragmentViewModel::class.java]
-        // 初始化状态（接下来都以这个为主，不会重复运行这个）
-        tsviewModel.update(1, false, false, null, null, null, null)
+        // 选文件时 Activity 可能被重建并回到本页，不要把正在跑的服务端打成客户端。
+        if (!TsServer.isRunningCurrent()) {
+            tsviewModel.update(1, false, null, null, null, null, null)
+        }
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -47,7 +53,7 @@ class ClientFragment : Fragment() {
                     if (it.isServerMode) {
                         return@collect
                     }
-                    if (it.isClientConnected) {
+                    if (it.isClientConnected && TsClient.peer?.isAlive == true) {
                         val dest = findNavController().currentDestination?.id
                         if (dest == R.id.ClientFragment) {
                             findNavController().navigate(R.id.action_ClientFragment_to_messengerFragment)
@@ -65,6 +71,12 @@ class ClientFragment : Fragment() {
             val error = viewModel.qrScanResult(result.toString())
             if (error != null) {
                 showToast(error)
+            } else if (KeepAlive.isQrAutoConnect()) {
+                // 等扫码页相机关掉再连：部分 Android 14 相机会短暂占住 Wi‑Fi
+                pendingQrAutoConnect = true
+                if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    scheduleQrAutoConnect()
+                }
             } else {
                 showToast("已填入 IP / 端口 / 密钥，请确认 IP 后点连接")
             }
@@ -143,6 +155,30 @@ class ClientFragment : Fragment() {
         binding.fab.setOnClickListener {
             findNavController().navigate(R.id.action_ClientFragment_to_qrScannerFragment)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        scheduleQrAutoConnect()
+    }
+
+    private fun scheduleQrAutoConnect() {
+        if (!pendingQrAutoConnect) {
+            return
+        }
+        pendingQrAutoConnect = false
+        view?.postDelayed({
+            if (!isAdded || _binding == null) {
+                return@postDelayed
+            }
+            if (tsviewModel.uiState.value.connectionStat != -1) {
+                return@postDelayed
+            }
+            val err = viewModel.startClient(tsviewModel)
+            if (err != null) {
+                showToast(err)
+            }
+        }, 500)
     }
 
     override fun onDestroyView() {

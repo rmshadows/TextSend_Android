@@ -3,53 +3,190 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    android:paddingStart="@dimen/ts_page_pad"
+    android:paddingTop="4dp"
+    android:paddingEnd="@dimen/ts_page_pad"
+    android:paddingBottom="8dp">
 
-    <Button
-        android:id="@+id/buttonSend"
+    <LinearLayout
+        android:id="@+id/rowButtons"
         android:layout_width="0dp"
-        android:layout_height="48dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="8dp"
-        android:text="@string/messager_send_btn"
-        app:layout_constraintBottom_toTopOf="@+id/editText"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintHorizontal_bias="0.494"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintTop_toTopOf="parent">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/buttonFile"
+            style="@style/Widget.Textsend.Button.Outlined"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/ts_btn"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:contentDescription="@string/messager_file_hint"
+            android:text="@string/messager_file_btn" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/buttonSend"
+            style="@style/Widget.Textsend.Button"
+            android:layout_width="0dp"
+            android:layout_height="@dimen/ts_btn"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:text="@string/messager_send_btn" />
+    </LinearLayout>
 
     <EditText
         android:id="@+id/editText"
         android:layout_width="0dp"
         android:layout_height="0dp"
-        android:layout_marginStart="8dp"
         android:layout_marginTop="8dp"
-        android:layout_marginEnd="8dp"
-        android:layout_marginBottom="8dp"
         android:autofillHints="no"
-        android:background="@drawable/default_border"
+        android:background="@drawable/bg_field"
         android:ems="10"
         android:gravity="start|top"
         android:hint="@string/messager_edittext_hint"
         android:inputType="textMultiLine"
+        android:minLines="3"
+        android:padding="10dp"
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        app:layout_constraintBottom_toTopOf="@+id/pendingBox"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHeight_min="88dp"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/rowButtons"
+        tools:ignore="SpeakableTextPresentCheck" />
+
+    <LinearLayout
+        android:id="@+id/pendingBox"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_surface"
+        android:orientation="vertical"
+        android:paddingStart="10dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="6dp"
+        android:visibility="gone"
+        app:layout_constrainedHeight="true"
+        app:layout_constraintBottom_toTopOf="@+id/fileBar"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/editText"
+        tools:visibility="visible">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/pendingTitle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                tools:text="待发 2（点发送才传）" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/buttonClearPending"
+                style="@style/Widget.Textsend.Button.Text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/messager_pending_clear" />
+        </LinearLayout>
+
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxHeight="100dp">
+
+            <LinearLayout
+                android:id="@+id/pendingList"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+        </ScrollView>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/fileBar"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/bg_surface"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="12dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="4dp"
+        android:visibility="gone"
         app:layout_constraintBottom_toTopOf="@+id/textView"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/buttonSend"
-        tools:ignore="SpeakableTextPresentCheck" />
+        app:layout_constraintTop_toBottomOf="@+id/pendingBox"
+        tools:visibility="visible">
+
+        <TextView
+            android:id="@+id/filePercent"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAppearance="?attr/textAppearanceHeadlineSmall"
+            android:textStyle="bold"
+            tools:text="45%" />
+
+        <TextView
+            android:id="@+id/fileMeta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            tools:text="发  2/5  ·  2.1 MB/s" />
+
+        <TextView
+            android:id="@+id/fileName"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="middle"
+            android:gravity="center"
+            android:singleLine="true"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?android:attr/textColorSecondary"
+            tools:text="vacation-photo.jpg" />
+
+        <ProgressBar
+            android:id="@+id/fileProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:max="1000" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/buttonCancelFile"
+            style="@style/Widget.Textsend.Button.Text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/messager_cancel_btn" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/textView"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_marginBottom="16dp"
+        android:layout_marginTop="4dp"
         android:text="@string/messager_label"
+        android:textAppearance="?attr/textAppearanceBodySmall"
+        android:textColor="?android:attr/textColorSecondary"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="@+id/editText"
-        app:layout_constraintStart_toStartOf="@+id/editText"
-        app:layout_constraintTop_toBottomOf="@+id/editText" />
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/fileBar" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

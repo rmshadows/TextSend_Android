@@ -4,13 +4,16 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
     tools:context=".MainActivity">
 
     <ScrollView
         android:layout_width="0dp"
         android:layout_height="0dp"
+        android:clipToPadding="false"
         android:fillViewport="true"
-        app:layout_constraintBottom_toTopOf="@id/fab"
+        android:paddingBottom="72dp"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent">
@@ -18,72 +21,105 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
             android:orientation="vertical"
-            android:paddingStart="32dp"
-            android:paddingTop="24dp"
-            android:paddingEnd="32dp"
+            android:paddingStart="@dimen/ts_page_pad"
+            android:paddingTop="4dp"
+            android:paddingEnd="@dimen/ts_page_pad"
             android:paddingBottom="16dp">
 
             <TextView
                 android:id="@+id/client_hint"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
+                android:layout_marginBottom="10dp"
                 android:text="@string/client_hint"
-                android:textAlignment="center" />
+                android:textAppearance="@style/TextAppearance.Textsend.Hint" />
 
-            <EditText
-                android:id="@+id/client_ip_address"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginBottom="12dp"
-                android:autofillHints="no"
-                android:digits="1234567890abcdefABCDEF:."
-                android:hint="@string/client_ip_addr_hint"
-                android:inputType="text"
-                android:text="@string/client_ip_addr_prefix" />
-
-            <EditText
-                android:id="@+id/client_port"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:layout_marginBottom="12dp"
-                android:autofillHints="no"
-                android:hint="@string/client_port_hint"
-                android:inputType="number"
-                android:text="@string/client_port_default" />
-
-            <EditText
-                android:id="@+id/client_pin"
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                android:gravity="top|start"
+                android:layout_marginBottom="@dimen/ts_gap"
+                android:hint="@string/client_ip_addr_hint"
+                app:boxCornerRadiusBottomEnd="10dp"
+                app:boxCornerRadiusBottomStart="10dp"
+                app:boxCornerRadiusTopEnd="10dp"
+                app:boxCornerRadiusTopStart="10dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/client_ip_address"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:autofillHints="no"
+                    android:digits="1234567890abcdefABCDEF:."
+                    android:inputType="text"
+                    android:text="@string/client_ip_addr_prefix"
+                    android:textAppearance="?attr/textAppearanceBodyMedium" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="@dimen/ts_gap"
+                android:hint="@string/client_port_hint"
+                app:boxCornerRadiusBottomEnd="10dp"
+                app:boxCornerRadiusBottomStart="10dp"
+                app:boxCornerRadiusTopEnd="10dp"
+                app:boxCornerRadiusTopStart="10dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/client_port"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:autofillHints="no"
+                    android:inputType="number"
+                    android:text="@string/client_port_default"
+                    android:textAppearance="?attr/textAppearanceBodyMedium" />
+            </com.google.android.material.textfield.TextInputLayout>
+
+            <com.google.android.material.textfield.TextInputLayout
+                style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
                 android:hint="@string/client_pin_hint"
-                android:importantForAutofill="no"
-                android:inputType="textMultiLine|textNoSuggestions"
-                android:minHeight="48dp" />
+                app:boxCornerRadiusBottomEnd="10dp"
+                app:boxCornerRadiusBottomStart="10dp"
+                app:boxCornerRadiusTopEnd="10dp"
+                app:boxCornerRadiusTopStart="10dp">
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/client_pin"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical|start"
+                    android:importantForAutofill="no"
+                    android:inputType="textNoSuggestions"
+                    android:maxLines="1"
+                    android:textAppearance="?attr/textAppearanceBodyMedium" />
+            </com.google.android.material.textfield.TextInputLayout>
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center"
                 android:orientation="horizontal">
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/button_paste"
+                    style="@style/Widget.Textsend.Button.Outlined"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_marginEnd="8dp"
+                    android:layout_height="@dimen/ts_btn"
+                    android:layout_marginEnd="6dp"
                     android:layout_weight="1"
                     android:text="@string/client_paste_btn" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/button_connect"
+                    style="@style/Widget.Textsend.Button"
                     android:layout_width="0dp"
-                    android:layout_height="48dp"
-                    android:layout_marginStart="8dp"
+                    android:layout_height="@dimen/ts_btn"
+                    android:layout_marginStart="6dp"
                     android:layout_weight="1"
                     android:text="@string/client_connect_btn" />
             </LinearLayout>
@@ -94,8 +130,8 @@
         android:id="@+id/fab"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginEnd="32dp"
-        android:layout_marginBottom="28dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
         android:contentDescription="@string/content_description"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

@@ -11,7 +11,6 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.core.content.res.ResourcesCompat
@@ -41,6 +40,7 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
     private var onceCreate = true
     private var spinnerIps: List<String>? = null
     private var spinnerPrefer: String? = null
+    private var lastAutoCopiedPsk = ""
 
     // This property is only valid between onCreateView and
     // onDestroyView.
@@ -120,10 +120,19 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                         }
                     }
                     // 更新下拉框
-                    binding.showPortTextView.text = if (it.serverRunning && it.pin.isNotEmpty()) {
-                        "${it.serverListenPort}  PIN ${it.pin}"
+                    binding.showPortTextView.text = "端口 ${it.serverListenPort}"
+                    if (it.serverRunning && it.pin.isNotEmpty()) {
+                        binding.pinButton.visibility = View.VISIBLE
+                        binding.pinButton.text = "PIN  ${it.pin}"
                     } else {
-                        "端口 ${it.serverListenPort}"
+                        binding.pinButton.visibility = View.GONE
+                    }
+                    if (it.serverRunning && it.pskB64.isNotEmpty() && it.pskB64 != lastAutoCopiedPsk) {
+                        lastAutoCopiedPsk = it.pskB64
+                        copyPskUri()
+                    }
+                    if (!it.serverRunning) {
+                        lastAutoCopiedPsk = ""
                     }
                     binding.serverTextView.setText(
                         if (it.serverRunning) R.string.server_copy_hint
@@ -135,10 +144,10 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                         spinnerIps = ips
                         spinnerPrefer = prefer
                         adapter = updateSpinnerAdapter(ips)
-                        binding.ipPortSpinner.adapter = adapter
+                        binding.ipPortSpinner.setAdapter(adapter)
                         val idx = ips.indexOf(prefer)
                         if (idx >= 0) {
-                            binding.ipPortSpinner.setSelection(idx)
+                            binding.ipPortSpinner.setText(ips[idx], false)
                         }
                     }
                 }
@@ -146,30 +155,21 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         }
 
         adapter = updateSpinnerAdapter(viewModel.uiState.value.netIps)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-
-        // 下拉框选择IP
-        binding.ipPortSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
-                if (_binding == null || parent == null || pos < 0) {
-                    return
-                }
-                if (parent.getItemAtPosition(pos).toString() == viewModel.CUSTOM_INPUT_FLAG) {
-                    // 自定义修改IP
-                    val df = InputIpAddressDialogFragment()
-                    df.setOnInputListener(this@ServerFragment)
-                    df.show(childFragmentManager, InputIpAddressDialogFragment.TAG)
-                } else {
-                    val sip = parent.getItemAtPosition(pos).toString()
-                    // 会调用两次，所以判断一下有没有变化
-                    if (viewModel.uiState.value.preferIpAddr != sip) {
-                        viewModel.update(sip, null, null, null, null, null)
-                    }
-                }
+        binding.ipPortSpinner.setAdapter(adapter)
+        binding.ipPortSpinner.keyListener = null
+        binding.ipPortSpinner.setOnItemClickListener { parent, _, pos, _ ->
+            if (_binding == null || pos < 0) {
+                return@setOnItemClickListener
             }
-
-            override fun onNothingSelected(parent: AdapterView<*>?) {
-                // Another interface callback
+            val sip = parent.getItemAtPosition(pos).toString()
+            if (sip == viewModel.CUSTOM_INPUT_FLAG) {
+                val df = InputIpAddressDialogFragment()
+                df.setOnInputListener(this@ServerFragment)
+                df.show(childFragmentManager, InputIpAddressDialogFragment.TAG)
+                return@setOnItemClickListener
+            }
+            if (viewModel.uiState.value.preferIpAddr != sip) {
+                viewModel.update(sip, null, null, null, null, null)
             }
         }
         return binding.root
@@ -220,18 +220,21 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         }
 
         binding.showPortTextView.setOnClickListener {
-            if (viewModel.uiState.value.serverRunning) {
-                copyPinUri()
-            } else {
+            if (!viewModel.uiState.value.serverRunning) {
                 showPortDialog()
             }
         }
         binding.showPortTextView.setOnLongClickListener {
-            if (viewModel.uiState.value.serverRunning) {
-                copyPinOnly()
-            } else {
+            if (!viewModel.uiState.value.serverRunning) {
                 showPortDialog()
             }
+            true
+        }
+        binding.pinButton.setOnClickListener {
+            copyPinUri()
+        }
+        binding.pinButton.setOnLongClickListener {
+            copyPinOnly()
             true
         }
         binding.qrImageView.setOnClickListener {
@@ -291,9 +294,9 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
      * 更新下拉框列表
      */
     private fun updateSpinnerAdapter(linkedList: LinkedList<String>): ArrayAdapter<String> {
-        return ArrayAdapter<String>(
-            this.requireContext(),
-            android.R.layout.simple_spinner_item,
+        return ArrayAdapter(
+            requireContext(),
+            R.layout.item_ip_dropdown,
             linkedList
         )
     }

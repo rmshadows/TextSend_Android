@@ -11,8 +11,8 @@ android {
         applicationId = "cn.rmshadows.textsend"
         minSdk = 28
         targetSdk = 34
-        versionCode = 5
-        versionName = "5.0.6"
+        versionCode = 9
+        versionName = "5.0.10"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -50,6 +50,7 @@ dependencies {
     // 权限请求框架：https://github.com/getActivity/XXPermissions（未使用）
     implementation("com.github.getActivity:XXPermissions:18.5")
     // 原项目依赖
+    implementation("androidx.activity:activity-ktx:1.8.2")
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.11.0")

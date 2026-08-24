@@ -5,6 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import cn.rmshadows.textsend.FileTransfer
 import cn.rmshadows.textsend.KeepAlive
 import protocol.PairingMaterial
 import protocol.TsServer
@@ -142,6 +143,7 @@ class ServerFragmentViewModel : ViewModel() {
             }
         })
         Thread(server, "ts-server").start()
+        TsServer.setFileIoCurrent(FileTransfer.callback)
     }
 
     fun stopServer(tsviewModel: TextsendViewModel, viewModel: ServerFragmentViewModel) {

@@ -1,3 +1,8 @@
 <resources>
     <dimen name="fab_margin">16dp</dimen>
+    <dimen name="ts_page_pad">16dp</dimen>
+    <dimen name="ts_gap">6dp</dimen>
+    <dimen name="ts_radius">10dp</dimen>
+    <dimen name="ts_field">44dp</dimen>
+    <dimen name="ts_btn">44dp</dimen>
 </resources>

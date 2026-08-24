@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <external-path
+        name="pub_inbox"
+        path="Download/TextSend" />
+    <external-files-path
+        name="app_inbox"
+        path="Download/TextSend" />
+    <files-path
+        name="int_inbox"
+        path="TextSend" />
+</paths>

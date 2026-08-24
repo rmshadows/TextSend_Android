@@ -4,7 +4,6 @@ import android.app.Dialog
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
-import android.view.ViewGroup
 import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -45,14 +44,6 @@ class InputIpAddressDialogFragment : DialogFragment() {
             }
             .setNegativeButton("取消", null)
         return builder.create()
-    }
-
-    override fun onCreateView(
-        inflater: LayoutInflater,
-        container: ViewGroup?,
-        savedInstanceState: Bundle?
-    ): View? {
-        return inflater.inflate(R.layout.fragment_input_dialog, container, false)
     }
 
     fun setOnInputListener(listener: OnInputIpReceived) {

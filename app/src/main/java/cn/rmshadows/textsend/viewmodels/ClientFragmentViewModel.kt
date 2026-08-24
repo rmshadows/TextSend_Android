@@ -1,8 +1,11 @@
 package cn.rmshadows.textsend.viewmodels
 
+import android.app.Application
 import android.util.Log
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
+import cn.rmshadows.textsend.FileTransfer
 import cn.rmshadows.textsend.KeepAlive
+import cn.rmshadows.textsend.LanSocket
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,8 +15,6 @@ import protocol.TsPeer
 import protocol.TsUri
 import utils.Constant.Companion.TAG
 import java.net.ConnectException
-import java.net.InetSocketAddress
-import java.net.Socket
 import java.net.SocketTimeoutException
 import java.net.UnknownHostException
 
@@ -31,7 +32,7 @@ data class ClientState(
 )
 
 
-class ClientFragmentViewModel : ViewModel() {
+class ClientFragmentViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(ClientState())
     val uiState: StateFlow<ClientState> = _uiState.asStateFlow()
 
@@ -97,30 +98,34 @@ class ClientFragmentViewModel : ViewModel() {
         KeepAlive.sessionActive = true
         TsClient.close()
         TsClient.abort = false
+        val app = getApplication<Application>()
         Thread({
             try {
                 Log.i(TAG, "startClient: ${uri.host}:${uri.port} mode=" + if (uri.pinMode) "PIN" else "PSK")
-                val sock = Socket()
+                val sock = LanSocket.connect(app, uri.host, uri.port, 8000)
                 TsClient.socket = sock
-                sock.connect(InetSocketAddress(uri.host, uri.port), 5000)
                 if (TsClient.abort) {
                     sock.close()
                     return@Thread
                 }
+                val holder = arrayOfNulls<TsPeer>(1)
                 val peer = TsPeer(sock, uri, { msg -> Log.i(TAG, msg) }, {
                     tsviewModel.update(null, null, true, null, null, null, 2)
                 }, {
+                    val p = holder[0]
                     val reached = tsviewModel.uiState.value.isClientConnected
                     TsClient.peer = null
                     tsviewModel.update(null, null, false, null, null, null, -1)
                     KeepAlive.sessionActive = false
                     if (!reached && !TsClient.abort) {
-                        reportFail("握手失败，请确认 PIN 或密钥")
+                        reportFail(handshakeFailText(p))
                     }
                 }, { text ->
                     tsviewModel.update(null, null, null, null, null, text, null)
                 })
+                holder[0] = peer
                 TsClient.peer = peer
+                peer.setFileIo(FileTransfer.callback)
                 if (TsClient.abort) {
                     peer.close()
                     return@Thread
@@ -150,6 +155,19 @@ class ClientFragmentViewModel : ViewModel() {
     private fun reportFail(msg: String) {
         _uiState.update {
             it.copy(errorSeq = it.errorSeq + 1, lastError = msg)
+        }
+    }
+
+    private fun handshakeFailText(peer: TsPeer?): String {
+        return when {
+            peer?.handshakeTimedOut() == true ->
+                "握手超时：请开飞行模式后再开 Wi‑Fi，或关掉「网络加速 / 智能双通道」"
+            peer?.authRejected() == true ->
+                "握手失败，请确认 PIN 或密钥"
+            peer?.handshakeError()?.contains("EPIPE") == true ->
+                "连接被断开，请重试"
+            else ->
+                "握手失败，请确认 PIN 或密钥"
         }
     }
 

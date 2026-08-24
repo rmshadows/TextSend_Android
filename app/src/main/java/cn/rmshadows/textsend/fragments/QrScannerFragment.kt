@@ -74,6 +74,10 @@ class QrScannerFragment : BarcodeCameraScanFragment() {
 
     override fun onDestroy() {
         super.onDestroy()
+        val st = tsviewModel.uiState.value
+        if (st.connectionStat.toInt() == -2 || st.isClientConnected) {
+            return
+        }
         tsviewModel.update(1, null, false, null, null, null, -1)
     }
 }
