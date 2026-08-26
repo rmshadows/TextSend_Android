@@ -4,7 +4,7 @@
  - 安卓版本：8.0+
  - 电脑服务端传送门：[Gitee](https://gitee.com/rmshadows/TextSend_Desktop)   [Github](https://github.com/rmshadows/TextSend_Desktop)
  - uTools插件传送门：[Github](https://github.com/rmshadows/TextSend_Utool)
- - 当前版本：5.0.10
+ - 当前版本：5.0.12
 
 >注意：说明文档虽然是旧的，但是大致用法没变。
 
@@ -113,6 +113,14 @@ adb logcat -v time -s "==>>APP DEBUG<<==" Textsend
 ### 更新日志
 
 5.0.0 起为协议 v1（二进制帧 / AES-GCM / `ts://`），与旧 4.0.x JSON 协议不互通。
+
+- 2026.8.26——5.0.12
+  - **记住上次连接**（默认关，仅 PIN）：设置页开关；PIN 握手成功后记住 IP/端口/PIN
+  - **连接保活**开关始终显示（默认关）；长按跳到系统通知设置
+  - 修：`annotation-experimental.R` 重复导致 dex 合并失败（排除该库）
+
+- 2026.8.25——5.0.11
+  - **固定 PIN**（默认关）：设置页开关 + 8 位输入；先输入再勾选
 
 - 2026.8.23——5.0.10
   - 长按「发送」改为打勾选文件夹；磁盘上的真实长文件名会照发

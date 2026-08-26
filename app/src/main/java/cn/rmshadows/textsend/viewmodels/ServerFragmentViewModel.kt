@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import cn.rmshadows.textsend.FileTransfer
+import cn.rmshadows.textsend.PinSettings
 import cn.rmshadows.textsend.KeepAlive
 import protocol.PairingMaterial
 import protocol.TsServer
@@ -121,7 +122,7 @@ class ServerFragmentViewModel : ViewModel() {
         serverGen++
         val gen = serverGen
         TsServer.stopCurrent()
-        val material = PairingMaterial.generate()
+        val material = PairingMaterial.forSession(PinSettings.isEnabled(), PinSettings.getPin())
         val port = uiState.value.serverListenPort.toInt()
         val maxConn = uiState.value.maxConnection.toInt()
         update(null, null, null, true, null, 0, material.pin, material.pskB64, "")

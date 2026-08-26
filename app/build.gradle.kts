@@ -11,8 +11,8 @@ android {
         applicationId = "cn.rmshadows.textsend"
         minSdk = 28
         targetSdk = 34
-        versionCode = 9
-        versionName = "5.0.10"
+        versionCode = 10
+        versionName = "5.0.12"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -36,6 +36,19 @@ android {
     buildFeatures {
         viewBinding = true
     }
+    packaging {
+        resources {
+            excludes += setOf(
+                "META-INF/androidx.annotation_annotation-experimental.version",
+            )
+        }
+    }
+}
+
+// AGP 8.4 会把 annotation-experimental 的空 R 打进 project_dex_archive 两次，
+// 合并 dex 报 R is defined multiple times。该库只有编译期注解，运行时不需要。
+configurations.configureEach {
+    exclude(group = "androidx.annotation", module = "annotation-experimental")
 }
 
 dependencies {
@@ -47,8 +60,6 @@ dependencies {
     implementation("com.github.jenly1314:zxing-lite:3.0.1")
     // Google Gson
     implementation("com.google.code.gson:gson:2.10.1")
-    // 权限请求框架：https://github.com/getActivity/XXPermissions（未使用）
-    implementation("com.github.getActivity:XXPermissions:18.5")
     // 原项目依赖
     implementation("androidx.activity:activity-ktx:1.8.2")
     implementation("androidx.core:core-ktx:1.12.0")

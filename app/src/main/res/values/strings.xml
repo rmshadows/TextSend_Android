@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Textsend</string>
     <string name="app_name_full">Textsend for Android</string>
-    <string name="app_version">5.0.10</string>
+    <string name="app_version">5.0.12</string>
     <string name="app_Author">Ryan Yim</string>
     <string name="app_License">GPLv3</string>
     <string name="github">https://github.com/rmshadows/TextSend_Android</string>
@@ -63,10 +63,16 @@
     <string name="settings_theme_paper_desc">暖纸 · 墨色</string>
     <string name="settings_theme_slate">石板</string>
     <string name="settings_theme_slate_desc">石板 · 靛蓝</string>
-    <string name="settings_keepalive">连接通知</string>
-    <string name="settings_keepalive_hint">连上后自动出通知，防止切到相册或后台时被掐断。关不掉。安卓 13+ 看不到通知就打开开关授权。</string>
+    <string name="settings_keepalive">连接保活</string>
+    <string name="settings_keepalive_hint">默认关。连上后在状态栏出通知，避免切到相册或后台时被掐断。安卓 13+ 打开时会申请通知权限。开关无效可长按，跳到系统通知设置。</string>
     <string name="settings_qr_auto">扫码后自动连接</string>
     <string name="settings_qr_auto_hint">默认打开。扫到 ts:// 二维码后直接握手，不用再点连接。</string>
+    <string name="settings_remember_connection">记住上次连接</string>
+    <string name="settings_remember_connection_hint">默认关。PIN 连接成功后记住 IP、端口和 PIN，不记扫码长密钥。</string>
+    <string name="settings_custom_pin">固定 PIN</string>
+    <string name="settings_custom_pin_hint">开启后每次启动服务端使用同一 8 位 PIN（默认关，随机生成）。</string>
+    <string name="settings_custom_pin_input">8 位数字 PIN</string>
+    <string name="settings_custom_pin_invalid">PIN 须为 8 位数字</string>
     <string name="settings_cache_hint">小于 16MB 会拷到缓存，更大的直接读原文件。发送成功自动删；清除缓存会同时清空待发。</string>
     <string name="settings_cache_size">发送缓存 %s</string>
     <string name="settings_cache_clear">清除缓存</string>

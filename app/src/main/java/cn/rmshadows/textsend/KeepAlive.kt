@@ -6,8 +6,8 @@ import android.content.Intent
 import androidx.core.content.ContextCompat
 
 /**
- * 会话进行中自动拉前台通知，避免进相册/切后台时被系统掐掉连接。
- * 设置里的开关只申请安卓 13+ 通知权限，关不掉保活本身。
+ * 设置里「连接保活」默认关。开启且会话进行中才拉前台通知，
+ * 避免进相册/切后台时被系统掐掉连接。
  */
 object KeepAlive {
     private const val PREF = "textsend_prefs"
@@ -63,8 +63,8 @@ object KeepAlive {
         }
         val i = Intent(app, KeepAliveService::class.java)
         try {
-            // 会话进行中必须拉前台服务：选相册会把主界面停掉，努比亚等机会直接掐掉局域网套接字。
-            if (sessionActive) {
+            // 选相册会把主界面停掉，努比亚等机会掐掉局域网套接字；仅用户打开保活时拉前台。
+            if (sessionActive && isEnabled()) {
                 ContextCompat.startForegroundService(app, i)
             } else {
                 app.stopService(i)

@@ -1,8 +1,11 @@
 package cn.rmshadows.textsend.fragments
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -12,7 +15,9 @@ import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.text.HtmlCompat
 import androidx.fragment.app.Fragment
+import cn.rmshadows.textsend.ClientConnectionSettings
 import cn.rmshadows.textsend.FileTransfer
+import cn.rmshadows.textsend.PinSettings
 import cn.rmshadows.textsend.KeepAlive
 import cn.rmshadows.textsend.R
 import cn.rmshadows.textsend.ReceiveFolder
@@ -29,15 +34,12 @@ class SettingsFragment : Fragment() {
     private val notifPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) {
-            applying = true
-            binding.keepAliveSwitch.isChecked = true
-            applying = false
-        } else {
-            applying = true
-            binding.keepAliveSwitch.isChecked = false
-            applying = false
-            Toast.makeText(context, "没有通知权限，状态栏可能看不到连接通知", Toast.LENGTH_SHORT).show()
+        applying = true
+        binding.keepAliveSwitch.isChecked = granted
+        applying = false
+        KeepAlive.setEnabled(granted)
+        if (!granted) {
+            Toast.makeText(context, "没有通知权限，保活通知出不来", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -53,33 +55,65 @@ class SettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         applying = true
+        binding.keepAliveSwitch.isChecked = KeepAlive.isEnabled()
         binding.qrAutoSwitch.isChecked = KeepAlive.isQrAutoConnect()
-        refreshNotifSwitch()
+        binding.rememberConnectionSwitch.isChecked = ClientConnectionSettings.isRememberEnabled()
+        binding.customPinSwitch.isChecked = PinSettings.isEnabled()
+        binding.customPinInput.setText(PinSettings.getPin())
         applying = false
         bindThemeCards()
         binding.keepAliveSwitch.setOnCheckedChangeListener { _, checked ->
             if (applying) {
                 return@setOnCheckedChangeListener
             }
-            if (Build.VERSION.SDK_INT < 33) {
+            if (checked && Build.VERSION.SDK_INT >= 33 && !hasNotifPermission()) {
+                notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 return@setOnCheckedChangeListener
             }
-            if (checked) {
-                if (!hasNotifPermission()) {
-                    notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                }
-                return@setOnCheckedChangeListener
-            }
-            applying = true
-            binding.keepAliveSwitch.isChecked = hasNotifPermission()
-            applying = false
-            Toast.makeText(context, "保活关不掉。要隐藏通知，到系统设置里关。", Toast.LENGTH_SHORT).show()
+            KeepAlive.setEnabled(checked)
         }
+        val openNotifSettings = View.OnLongClickListener {
+            openAppNotificationSettings()
+            true
+        }
+        binding.keepAliveSwitch.setOnLongClickListener(openNotifSettings)
+        binding.keepAliveRow.setOnLongClickListener(openNotifSettings)
         binding.qrAutoSwitch.setOnCheckedChangeListener { _, checked ->
             if (applying) {
                 return@setOnCheckedChangeListener
             }
             KeepAlive.setQrAutoConnect(checked)
+        }
+        binding.rememberConnectionSwitch.setOnCheckedChangeListener { _, checked ->
+            if (applying) {
+                return@setOnCheckedChangeListener
+            }
+            ClientConnectionSettings.setRememberEnabled(checked)
+        }
+        binding.customPinSwitch.setOnCheckedChangeListener { _, checked ->
+            if (applying) {
+                return@setOnCheckedChangeListener
+            }
+            if (checked && !PinSettings.isValidPin(binding.customPinInput.text?.toString())) {
+                applying = true
+                binding.customPinSwitch.isChecked = false
+                applying = false
+                Toast.makeText(context, R.string.settings_custom_pin_invalid, Toast.LENGTH_SHORT).show()
+                return@setOnCheckedChangeListener
+            }
+            PinSettings.setEnabled(checked)
+        }
+        binding.customPinInput.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus || applying) {
+                return@setOnFocusChangeListener
+            }
+            val pin = binding.customPinInput.text?.toString()?.trim() ?: ""
+            if (pin.isNotEmpty() && !PinSettings.isValidPin(pin)) {
+                Toast.makeText(context, R.string.settings_custom_pin_invalid, Toast.LENGTH_SHORT).show()
+                binding.customPinInput.setText(PinSettings.getPin())
+                return@setOnFocusChangeListener
+            }
+            PinSettings.setPin(pin)
         }
         refreshCacheSize()
         binding.buttonClearCache.setOnClickListener {
@@ -124,7 +158,9 @@ class SettingsFragment : Fragment() {
         super.onResume()
         if (_binding != null) {
             refreshCacheSize()
-            refreshNotifSwitch()
+            applying = true
+            binding.keepAliveSwitch.isChecked = KeepAlive.isEnabled()
+            applying = false
         }
     }
 
@@ -138,15 +174,22 @@ class SettingsFragment : Fragment() {
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
-    private fun refreshNotifSwitch() {
-        if (Build.VERSION.SDK_INT < 33) {
-            binding.keepAliveSwitch.visibility = View.GONE
-            return
+    private fun openAppNotificationSettings() {
+        val ctx = context ?: return
+        val pkg = ctx.packageName
+        val intents = listOf(
+            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, pkg),
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).setData(Uri.fromParts("package", pkg, null))
+        )
+        for (intent in intents) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                startActivity(intent)
+                return
+            } catch (_: Exception) {
+            }
         }
-        binding.keepAliveSwitch.visibility = View.VISIBLE
-        applying = true
-        binding.keepAliveSwitch.isChecked = hasNotifPermission()
-        applying = false
+        Toast.makeText(ctx, "打不开系统通知设置", Toast.LENGTH_SHORT).show()
     }
 
     private fun bindThemeCards() {

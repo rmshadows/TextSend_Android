@@ -9,5 +9,7 @@ class TextsendApp : Application() {
         super.onCreate()
         FileNames.init(this)
         KeepAlive.init(this)
+        PinSettings.init(this)
+        ClientConnectionSettings.init(this)
     }
 }

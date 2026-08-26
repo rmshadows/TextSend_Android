@@ -26,6 +26,19 @@ public final class PairingMaterial {
         return new PairingMaterial(psk, new String(digits));
     }
 
+    public static boolean isValidPin(String pin) {
+        return pin != null && pin.matches("\\d{" + Protocol.PIN_LEN + "}");
+    }
+
+    public static PairingMaterial forSession(boolean customEnabled, String customPin) {
+        if (customEnabled && isValidPin(customPin)) {
+            byte[] psk = new byte[Protocol.PSK_LEN];
+            RNG.nextBytes(psk);
+            return new PairingMaterial(psk, customPin);
+        }
+        return generate();
+    }
+
     public String toUri(String host, int port) {
         return toPskUri(host, port);
     }

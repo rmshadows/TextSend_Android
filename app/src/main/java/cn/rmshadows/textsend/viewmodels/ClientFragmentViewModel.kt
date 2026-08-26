@@ -3,6 +3,7 @@ package cn.rmshadows.textsend.viewmodels
 import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
+import cn.rmshadows.textsend.ClientConnectionSettings
 import cn.rmshadows.textsend.FileTransfer
 import cn.rmshadows.textsend.KeepAlive
 import cn.rmshadows.textsend.LanSocket
@@ -35,6 +36,17 @@ data class ClientState(
 class ClientFragmentViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(ClientState())
     val uiState: StateFlow<ClientState> = _uiState.asStateFlow()
+
+    init {
+        ClientConnectionSettings.getLast()?.let { (ip, port, pin) ->
+            _uiState.value = ClientState(
+                serverIp = ip,
+                serverPort = port,
+                keyMaterial = pin,
+                fillSeq = 1
+            )
+        }
+    }
 
     fun applyFields(ip: String, port: Int, secret: String) {
         val uri = parseTs(ip) ?: parseTs(secret)
@@ -110,6 +122,9 @@ class ClientFragmentViewModel(application: Application) : AndroidViewModel(appli
                 }
                 val holder = arrayOfNulls<TsPeer>(1)
                 val peer = TsPeer(sock, uri, { msg -> Log.i(TAG, msg) }, {
+                    if (ClientConnectionSettings.isRememberEnabled() && uri.pinMode) {
+                        ClientConnectionSettings.saveLast(uri.host, uri.port, uri.k)
+                    }
                     tsviewModel.update(null, null, true, null, null, null, 2)
                 }, {
                     val p = holder[0]
