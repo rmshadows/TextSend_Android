@@ -87,21 +87,27 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                         return@collect
                     }
                     if (it.listenError.isNotEmpty()) {
-                        Toast.makeText(context, it.listenError, Toast.LENGTH_LONG).show()
-                        viewModel.update(null, null, null, null, null, null, null, null, "")
+                        val ctx = context
+                        if (ctx != null) {
+                            Toast.makeText(ctx, it.listenError, Toast.LENGTH_LONG).show()
+                            viewModel.update(null, null, null, null, null, null, null, null, "")
+                        }
                     }
-                    // 更新二维码
-                    if (it.serverRunning && it.pskB64.isNotEmpty()) {
-                        val uri = TsUri.format(
-                            it.preferIpAddr,
-                            it.serverListenPort.toInt(),
-                            it.pskB64
-                        )
-                        binding.qrImageView.setImageBitmap(generateQRCode(uri))
-                    } else {
-                        val bitmap =
-                            ResourcesCompat.getDrawable(resources, R.mipmap.ic_textsend, null)
-                        binding.qrImageView.setImageDrawable(bitmap)
+                    // 更新二维码。生成失败只提示，不能让收集协程把进程带走。
+                    try {
+                        if (it.serverRunning && it.pskB64.isNotEmpty()) {
+                            val port = it.serverListenPort.toIntOrNull()
+                            if (port != null) {
+                                val uri = TsUri.format(it.preferIpAddr, port, it.pskB64)
+                                binding.qrImageView.setImageBitmap(generateQRCode(uri))
+                            }
+                        } else {
+                            val bitmap =
+                                ResourcesCompat.getDrawable(resources, R.mipmap.ic_textsend, null)
+                            binding.qrImageView.setImageDrawable(bitmap)
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
                     // 更新切换按钮
                     if (it.serverRunning) {
@@ -129,7 +135,11 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                     }
                     if (it.serverRunning && it.pskB64.isNotEmpty() && it.pskB64 != lastAutoCopiedPsk) {
                         lastAutoCopiedPsk = it.pskB64
-                        copyPskUri()
+                        try {
+                            copyPskUri()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                        }
                     }
                     if (!it.serverRunning) {
                         lastAutoCopiedPsk = ""

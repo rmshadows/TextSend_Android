@@ -7,6 +7,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.EditText
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.DialogFragment
 import cn.rmshadows.textsend.R
@@ -38,17 +39,18 @@ class InputPortNumberDialogFragment : DialogFragment() {
             .setMessage("请输入端口号（输入0默认54300）：")
             .setPositiveButton("确定") { _, _ ->
                 var portInput:String = et.text.toString()
-                if(portInput != ""){
-                    if (portInput == "0"){
+                if (portInput != "") {
+                    if (portInput == "0") {
                         portInput = "54300"
                     }
-                    try {
-                        portInput.toInt()
-                        onInputReceived?.onInputPortReceived(portInput)
-                    }catch (e: Exception){
-                        Log.w(TAG, "onCreateDialog: 输入的可能不是数字！")
+                    val n = portInput.toIntOrNull()
+                    if (n == null || n !in 1..65535) {
+                        Toast.makeText(context, "端口需在 1–65535", Toast.LENGTH_SHORT).show()
+                        Log.w(TAG, "onCreateDialog: 端口无效 $portInput")
+                        return@setPositiveButton
                     }
-                    dismiss() // 关闭对话框
+                    onInputReceived?.onInputPortReceived(n.toString())
+                    dismiss()
                 }
             }
             .setNegativeButton("取消", null)

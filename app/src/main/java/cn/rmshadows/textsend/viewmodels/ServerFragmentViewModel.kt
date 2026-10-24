@@ -63,12 +63,30 @@ class ServerFragmentViewModel : ViewModel() {
     }
 
     fun getDeviceIP() {
+        try {
+            collectDeviceIps()
+        } catch (e: Exception) {
+            e.printStackTrace()
+            val onlyCustom = LinkedList<String>()
+            onlyCustom.add(CUSTOM_INPUT_FLAG)
+            update("", null, onlyCustom, null, null, null)
+        }
+    }
+
+    private fun collectDeviceIps() {
+        val enumerated = NetworkInterface.getNetworkInterfaces()
+        if (enumerated == null) {
+            val onlyCustom = LinkedList<String>()
+            onlyCustom.add(CUSTOM_INPUT_FLAG)
+            update("", null, onlyCustom, null, null, null)
+            return
+        }
         val lan = LinkedList<String>()
         val junk = LinkedList<String>()
-        val interfaces: List<NetworkInterface> =
-            Collections.list(NetworkInterface.getNetworkInterfaces())
+        val interfaces: List<NetworkInterface> = Collections.list(enumerated)
         for (intf in interfaces) {
-            val addrs: List<InetAddress> = Collections.list(intf.inetAddresses)
+            val rawAddrs = intf.inetAddresses ?: continue
+            val addrs: List<InetAddress> = Collections.list(rawAddrs)
             for (addr in addrs) {
                 if (addr.isAnyLocalAddress || addr.isMulticastAddress) {
                     continue
@@ -119,14 +137,19 @@ class ServerFragmentViewModel : ViewModel() {
     }
 
     fun startServer(tsviewModel: TextsendViewModel, viewModel: ServerFragmentViewModel) {
+        val portText = uiState.value.serverListenPort.trim()
+        val port = portText.toIntOrNull()
+        if (port == null || port !in 1..65535) {
+            update(null, null, null, false, null, 0, "", "", "端口无效（1–65535）")
+            return
+        }
         serverGen++
         val gen = serverGen
         TsServer.stopCurrent()
         val material = PairingMaterial.forSession(PinSettings.isEnabled(), PinSettings.getPin())
-        val port = uiState.value.serverListenPort.toInt()
-        val maxConn = uiState.value.maxConnection.toInt()
-        update(null, null, null, true, null, 0, material.pin, material.pskB64, "")
-        KeepAlive.sessionActive = true
+        val maxConn = uiState.value.maxConnection.toInt().coerceAtLeast(1)
+        // 先别标成运行中。bind 失败时如果已经切到运行界面，回滚过程中的异常会把进程打死。
+        update(null, null, null, false, null, 0, "", "", "")
         val server = TsServer(port, maxConn, material, { count ->
             if (gen == serverGen) {
                 viewModel.update(null, null, null, null, null, count)
@@ -142,9 +165,24 @@ class ServerFragmentViewModel : ViewModel() {
                 tsviewModel.update(null, null, false, null, null, null, -1)
                 KeepAlive.sessionActive = false
             }
+        }, {
+            if (gen == serverGen) {
+                viewModel.update(null, null, null, true, null, 0, material.pin, material.pskB64, "")
+                KeepAlive.sessionActive = true
+            }
         })
-        Thread(server, "ts-server").start()
         TsServer.setFileIoCurrent(FileTransfer.callback)
+        val worker = Thread(server, "ts-server")
+        // 监听线程上没接住的异常不能交给系统默认处理，否则整个进程会被杀掉。
+        worker.setUncaughtExceptionHandler { _, e ->
+            e.printStackTrace()
+            if (gen == serverGen) {
+                viewModel.update(null, null, null, false, null, 0, "", "", "服务启动失败")
+                tsviewModel.update(null, null, false, null, null, null, -1)
+                KeepAlive.sessionActive = false
+            }
+        }
+        worker.start()
     }
 
     fun stopServer(tsviewModel: TextsendViewModel, viewModel: ServerFragmentViewModel) {

@@ -11,14 +11,30 @@ android {
         applicationId = "cn.rmshadows.textsend"
         minSdk = 28
         targetSdk = 34
-        versionCode = 10
-        versionName = "5.0.12"
+        versionCode = 11
+        versionName = "5.0.13"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    // CI 通过环境变量传入 keystore。未设置时 release 保持未签名，本地构建行为不变。
+    val releaseKeystore = System.getenv("ANDROID_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+    if (releaseKeystore != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseKeystore != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

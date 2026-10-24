@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Textsend</string>
     <string name="app_name_full">Textsend for Android</string>
-    <string name="app_version">5.0.12</string>
+    <string name="app_version">5.0.13</string>
     <string name="app_Author">Ryan Yim</string>
     <string name="app_License">GPLv3</string>
     <string name="github">https://github.com/rmshadows/TextSend_Android</string>

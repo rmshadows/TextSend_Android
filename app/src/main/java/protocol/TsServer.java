@@ -5,6 +5,7 @@ import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.Locale;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -31,6 +32,8 @@ public final class TsServer implements Runnable {
     private final Consumer<String> onText;
     /** 空串表示正常结束；非空是启动/监听失败原因 */
     private final Consumer<String> onListenEnded;
+    /** bind 成功、开始 accept 之前。失败时不会调用 */
+    private final Runnable onListening;
     private volatile FileIoCallback fileIo;
     private final AtomicBoolean running = new AtomicBoolean(true);
     private final List<TsPeer> peers = new ArrayList<>();
@@ -39,13 +42,14 @@ public final class TsServer implements Runnable {
     private ServerSocket serverSocket;
 
     public TsServer(int port, int maxConnections, PairingMaterial material, IntConsumer onClientCount,
-                    Consumer<String> onText, Consumer<String> onListenEnded) {
+                    Consumer<String> onText, Consumer<String> onListenEnded, Runnable onListening) {
         this.port = port;
         this.maxConnections = maxConnections;
         this.material = material;
         this.onClientCount = onClientCount;
         this.onText = onText;
         this.onListenEnded = onListenEnded;
+        this.onListening = onListening;
         instance = this;
     }
 
@@ -178,61 +182,120 @@ public final class TsServer implements Runnable {
             serverSocket = ss;
             ss.setReuseAddress(true);
             ss.bind(new InetSocketAddress(port), 50);
+            if (!running.get()) {
+                return;
+            }
             System.out.println("Log: v1 server listen " + port + " PIN=" + material.pin
                     + "  (psk+pin 两种连接都接受)");
+            if (onListening != null) {
+                try {
+                    onListening.run();
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
             while (running.get()) {
-                Socket sock = ss.accept();
-                String ip = sock.getInetAddress() == null ? "?" : sock.getInetAddress().getHostAddress();
-                System.out.println("Log: 【接入】TCP " + ip + ":" + sock.getPort());
-                if (!authLimiter.allow(ip)) {
-                    System.out.println("Log: 【拒绝】" + ip + " PIN 失败次数过多，已锁定");
-                    sock.close();
-                    continue;
+                final Socket sock;
+                try {
+                    sock = ss.accept();
+                } catch (IOException e) {
+                    if (running.get()) {
+                        e.printStackTrace();
+                        listenError = "监听中断";
+                    }
+                    break;
+                }
+                try {
+                    acceptOne(sock);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    try {
+                        sock.close();
+                    } catch (IOException ignored) {
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // 端口占用在部分系统上是 BindException，也可能是未包装的 ErrnoException。
+            // 只接 IOException 时，别的异常会打死监听线程，Android 随之杀掉整个进程。
+            if (running.get()) {
+                e.printStackTrace();
+                listenError = describeListenFailure(port, e);
+            }
+        } finally {
+            try {
+                stop();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            if (onListenEnded != null) {
+                try {
+                    onListenEnded.accept(listenError);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+    }
+
+    private void acceptOne(Socket sock) throws IOException {
+        String ip = sock.getInetAddress() == null ? "?" : sock.getInetAddress().getHostAddress();
+        System.out.println("Log: 【接入】TCP " + ip + ":" + sock.getPort());
+        if (!authLimiter.allow(ip)) {
+            System.out.println("Log: 【拒绝】" + ip + " PIN 失败次数过多，已锁定");
+            sock.close();
+            return;
+        }
+        synchronized (peers) {
+            peers.removeIf(p -> !p.occupiesSlot());
+            if (peers.size() >= maxConnections) {
+                System.out.println("Log: 【拒绝】" + ip + " 已达最大连接 " + maxConnections);
+                sock.close();
+                return;
+            }
+            TsPeer[] box = new TsPeer[1];
+            TsPeer peer = new TsPeer(sock, material, msg -> {
+            }, () -> {
+                authLimiter.ok(ip);
+                notifyCount();
+            }, () -> {
+                TsPeer self = box[0];
+                if (self != null && self.authRejected() && running.get()) {
+                    authLimiter.fail(ip);
                 }
                 synchronized (peers) {
                     peers.removeIf(p -> !p.occupiesSlot());
-                    if (peers.size() >= maxConnections) {
-                        System.out.println("Log: 【拒绝】" + ip + " 已达最大连接 " + maxConnections);
-                        sock.close();
-                        continue;
-                    }
-                    TsPeer[] box = new TsPeer[1];
-                    TsPeer peer = new TsPeer(sock, material, msg -> {
-                    }, () -> {
-                        authLimiter.ok(ip);
-                        notifyCount();
-                    }, () -> {
-                        TsPeer self = box[0];
-                        if (self != null && self.authRejected() && running.get()) {
-                            authLimiter.fail(ip);
-                        }
-                        synchronized (peers) {
-                            peers.removeIf(p -> !p.occupiesSlot());
-                        }
-                        notifyCount();
-                    }, onText);
-                    peer.setFileIo(fileIo);
-                    box[0] = peer;
-                    peers.add(peer);
-                    pool.execute(peer);
                 }
                 notifyCount();
+            }, onText);
+            peer.setFileIo(fileIo);
+            box[0] = peer;
+            peers.add(peer);
+            pool.execute(peer);
+        }
+        notifyCount();
+    }
+
+    /** 给界面看的启动失败原因。权限不足和端口无效不要说成“已被占用”。 */
+    static String describeListenFailure(int port, Throwable e) {
+        for (Throwable c = e; c != null; c = c.getCause()) {
+            if (c instanceof IllegalArgumentException) {
+                return "端口 " + port + " 无效";
             }
-        } catch (IOException e) {
-            if (running.get()) {
-                e.printStackTrace();
-                if (e instanceof BindException) {
-                    listenError = "端口 " + port + " 已被占用";
-                } else {
-                    listenError = "服务启动失败";
-                }
+            String msg = c.getMessage() == null ? "" : c.getMessage().toLowerCase(Locale.ROOT);
+            boolean denied = msg.contains("eacces") || msg.contains("eperm") || msg.contains("permission");
+            boolean inUse = c instanceof BindException
+                    || c.getClass().getName().endsWith("ErrnoException")
+                    || msg.contains("eaddrinuse")
+                    || msg.contains("address already in use");
+            if (denied) {
+                return "没有权限监听端口 " + port;
             }
-        } finally {
-            stop();
-            if (onListenEnded != null) {
-                onListenEnded.accept(listenError);
+            if (inUse) {
+                return "端口 " + port + " 已被占用";
             }
         }
+        return "服务启动失败";
     }
 
     public int sendToAll(String text) {
@@ -420,7 +483,11 @@ public final class TsServer implements Runnable {
             n = (int) peers.stream().filter(TsPeer::isAlive).count();
         }
         if (onClientCount != null) {
-            onClientCount.accept(n);
+            try {
+                onClientCount.accept(n);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 }
