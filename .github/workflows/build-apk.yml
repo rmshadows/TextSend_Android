@@ -1,9 +1,13 @@
-# 手动构建 APK（不自动跑）
-# Actions → Build APK → Run workflow
+# 推送到 dev / master 时自动打 APK。也可 Actions → Build APK → Run workflow。
+# release.env：PUSH_RELEASE 控制 push 发不发 Release；RELEASE_ENABLE 控制手动运行发不发。
+# master 稳定版 tag 为 v<版本>，同版本覆盖并标 latest。dev 稳定版 tag 为 v<版本>-dev，同版本覆盖，不标 latest。
+# 滚动版为 rolling-<时间戳>-<分支>，不标 latest。版本来自 app/build.gradle.kts 的 versionName。
 #
+# 正式包三种：APK、AAB、APKS（bundletool 从 AAB 打出）。
 # 签名用仓库 Secrets，可以先留空。留空时：
 #   - debug APK 用调试证书签名，可以直接安装
-#   - release APK 未签名（app-release-unsigned.apk）
+#   - release APK / AAB 未签名，发布文件名带 unsigned
+#   - APKS 用调试证书签名，文件名带 debugkey，便于安装；AAB 仍是未签名
 # 需要正式签名时，在 Settings → Secrets and variables → Actions 添加：
 #   ANDROID_KEYSTORE_BASE64    keystore 的 base64（base64 -w0 release.keystore）
 #   ANDROID_KEYSTORE_PASSWORD
@@ -12,6 +16,10 @@
 name: Build APK
 
 on:
+  push:
+    branches:
+      - dev
+      - master
   workflow_dispatch:
 
 permissions:
@@ -22,6 +30,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      release_enable: ${{ steps.out.outputs.release_enable }}
+      push_release: ${{ steps.out.outputs.push_release }}
+      version: ${{ steps.out.outputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Read release.env
+        id: out
+        run: |
+          set -euo pipefail
+          [[ -f release.env ]] || { echo "::error::release.env not found"; exit 1; }
+          tmp="$(mktemp)"
+          grep -Ev '^\s*#|^\s*$' release.env > "$tmp" || true
+          if grep -nPv '^[A-Za-z_][A-Za-z0-9_]*=.*$' "$tmp" >/dev/null; then
+            echo "::error::release.env has invalid line(s):"
+            grep -nPv '^[A-Za-z_][A-Za-z0-9_]*=.*$' "$tmp" || true
+            exit 1
+          fi
+          RELEASE_ENABLE=""
+          PUSH_RELEASE=""
+          while IFS= read -r line; do
+            key="${line%%=*}"
+            val="${line#*=}"
+            case "$key" in
+              RELEASE_ENABLE) RELEASE_ENABLE="$val" ;;
+              PUSH_RELEASE) PUSH_RELEASE="$val" ;;
+              *) echo "::error::unknown key in release.env: $key"; exit 1 ;;
+            esac
+          done < "$tmp"
+          normalize_bool() {
+            local name="$1"
+            local value="$2"
+            if [[ "$value" =~ ^[01]$ ]]; then
+              if [[ "$value" == "1" ]]; then value=true; else value=false; fi
+            fi
+            case "$value" in
+              true|false) printf '%s' "$value" ;;
+              *) echo "::error::Invalid ${name}: ${value:-<empty>} (expected 0/1 or false/true)" >&2; exit 1 ;;
+            esac
+          }
+          RELEASE_ENABLE="$(normalize_bool RELEASE_ENABLE "$RELEASE_ENABLE")"
+          PUSH_RELEASE="$(normalize_bool PUSH_RELEASE "$PUSH_RELEASE")"
+          VERSION="$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -1)"
+          [[ -n "$VERSION" ]] || { echo "::error::read versionName failed"; exit 1; }
+          echo "RELEASE_ENABLE=$RELEASE_ENABLE"
+          echo "PUSH_RELEASE=$PUSH_RELEASE"
+          echo "VERSION=$VERSION"
+          echo "release_enable=$RELEASE_ENABLE" >> "$GITHUB_OUTPUT"
+          echo "push_release=$PUSH_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
   build:
     runs-on: ubuntu-24.04
     steps:
@@ -51,7 +114,7 @@ jobs:
             echo "Release keystore secret is empty; release APK will be unsigned. Debug APK is still installable."
           fi
 
-      - name: Build APK
+      - name: Build APK, AAB, and APKS
         env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -59,11 +122,180 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x ./gradlew
-          ./gradlew assembleDebug assembleRelease --stacktrace
+          ./gradlew assembleDebug assembleRelease bundleRelease --stacktrace
+          shopt -s nullglob
+          aabs=(app/build/outputs/bundle/release/*.aab)
+          if [[ ${#aabs[@]} -ne 1 ]]; then
+            echo "expected 1 release aab, found ${#aabs[@]}" >&2
+            exit 1
+          fi
+          aab="${aabs[0]}"
+          curl -fsSL -o "${RUNNER_TEMP}/bundletool.jar" \
+            https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar
+          if [[ -n "${ANDROID_KEYSTORE_FILE:-}" ]]; then
+            apks_out="app/build/outputs/bundle/release/app-release.apks"
+            java -jar "${RUNNER_TEMP}/bundletool.jar" build-apks \
+              --bundle="$aab" \
+              --output="$apks_out" \
+              --ks="${ANDROID_KEYSTORE_FILE}" \
+              --ks-pass="pass:${ANDROID_KEYSTORE_PASSWORD}" \
+              --ks-key-alias="${ANDROID_KEY_ALIAS}" \
+              --key-pass="pass:${ANDROID_KEY_PASSWORD}"
+          else
+            apks_out="app/build/outputs/bundle/release/app-release-unsigned.apks"
+            java -jar "${RUNNER_TEMP}/bundletool.jar" build-apks \
+              --bundle="$aab" \
+              --output="$apks_out"
+            if [[ "$(basename "$aab")" == "app-release.aab" ]]; then
+              mv -f "$aab" "app/build/outputs/bundle/release/app-release-unsigned.aab"
+            fi
+          fi
+          echo "APKS $apks_out"
+
+      - name: Verify launcher entry
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          apks=(app/build/outputs/apk/**/*.apk)
+          if [[ ${#apks[@]} -eq 0 ]]; then
+            echo "no apk" >&2
+            exit 1
+          fi
+          sdk="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          aapt="$(find "$sdk/build-tools" -type f -name aapt | sort | tail -1)"
+          if [[ -z "$aapt" ]]; then
+            echo "aapt not found under $sdk/build-tools" >&2
+            exit 1
+          fi
+          for apk in "${apks[@]}"; do
+            echo "==> $apk"
+            badging="$("$aapt" dump badging "$apk")"
+            if ! grep -q "launchable-activity: name='cn.rmshadows.textsend.MainActivity'" <<<"$badging"; then
+              echo "$apk 缺少桌面启动入口 MainActivity" >&2
+              exit 1
+            fi
+          done
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: TextSend-android-apk
-          path: app/build/outputs/apk/**/*.apk
+          name: TextSend-android
+          path: |
+            app/build/outputs/apk/**/*.apk
+            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/bundle/release/*.apks
           if-no-files-found: error
+
+  release:
+    needs: [prepare, build]
+    if: >-
+      (github.event_name == 'push' && needs.prepare.outputs.push_release == 'true') ||
+      (github.event_name == 'workflow_dispatch' && needs.prepare.outputs.release_enable == 'true')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download APK
+        uses: actions/download-artifact@v4
+        with:
+          name: TextSend-android
+          path: apk-in
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p upload
+          shopt -s globstar nullglob
+          found=0
+          for f in apk-in/**/*.{apk,aab,apks}; do
+            [[ -f "$f" ]] || continue
+            found=1
+            base="$(basename "$f")"
+            case "$base" in
+              app-debug.apk)
+                dest="upload/TextSend-${VERSION}-android-debug.apk"
+                ;;
+              app-release.apk)
+                dest="upload/TextSend-${VERSION}-android-installer.apk"
+                ;;
+              app-release-unsigned.apk)
+                dest="upload/TextSend-${VERSION}-android-unsigned.apk"
+                ;;
+              app-release.aab)
+                dest="upload/TextSend-${VERSION}-android.aab"
+                ;;
+              app-release-unsigned.aab)
+                dest="upload/TextSend-${VERSION}-android-unsigned.aab"
+                ;;
+              app-release.apks)
+                dest="upload/TextSend-${VERSION}-android.apks"
+                ;;
+              app-release-unsigned.apks)
+                dest="upload/TextSend-${VERSION}-android-unsigned.apks"
+                ;;
+              *)
+                echo "::error::unexpected artifact: $base" >&2
+                exit 1
+                ;;
+            esac
+            cp -a "$f" "$dest"
+          done
+          if [[ "$found" -eq 0 ]]; then
+            echo "::error::no apk" >&2
+            exit 1
+          fi
+          files=(upload/*)
+
+          BRANCH="${GITHUB_REF_NAME}"
+          BRANCH_TAG="$(printf '%s' "$BRANCH" | tr '/' '-')"
+          WHEN="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          STAMP="$(date -u '+%Y%m%d-%H%M%S')"
+          if [[ "$BRANCH" == "master" ]]; then
+            STABLE="v${VERSION}"
+            STABLE_TITLE="TextSend Android ${VERSION}"
+            LATEST_FLAG=(--latest)
+          else
+            STABLE="v${VERSION}-${BRANCH_TAG}"
+            STABLE_TITLE="TextSend Android ${VERSION}-${BRANCH_TAG}"
+            LATEST_FLAG=(--latest=false)
+          fi
+          ROLLING="rolling-${STAMP}-${BRANCH_TAG}"
+          notes="$(mktemp)"
+
+          printf 'TextSend Android %s\n\n分支：%s\n提交：%s\n时间：%s\n' \
+            "$VERSION" "$BRANCH" "$GITHUB_SHA" "$WHEN" > "$notes"
+          if gh release view "$STABLE" >/dev/null 2>&1; then
+            echo "覆盖 ${STABLE}"
+            gh release upload "$STABLE" "${files[@]}" --clobber
+            gh release edit "$STABLE" "${LATEST_FLAG[@]}" --title "$STABLE_TITLE" --notes-file "$notes"
+            git tag -f "$STABLE" "$GITHUB_SHA"
+            git push origin "refs/tags/${STABLE}" --force
+          else
+            echo "创建 ${STABLE}"
+            gh release create "$STABLE" "${files[@]}" \
+              "${LATEST_FLAG[@]}" \
+              --title "$STABLE_TITLE" \
+              --notes-file "$notes" \
+              --target "$GITHUB_SHA"
+          fi
+
+          printf 'TextSend Android rolling\n\n对应版本：%s\n分支：%s\n提交：%s\n时间：%s\n' \
+            "$VERSION" "$BRANCH" "$GITHUB_SHA" "$WHEN" > "$notes"
+          echo "创建滚动版 ${ROLLING}（不标 latest）"
+          gh release create "$ROLLING" "${files[@]}" \
+            --latest=false \
+            --title "TextSend Android rolling ${WHEN} (${BRANCH})" \
+            --notes-file "$notes" \
+            --target "$GITHUB_SHA"
+          if [[ "$BRANCH" == "master" ]]; then
+            gh release edit "$STABLE" --latest
+          fi
+
+          gh release view "$STABLE" --json url,tagName -q '.url'
+          gh release view "$ROLLING" --json url,tagName -q '.url'
