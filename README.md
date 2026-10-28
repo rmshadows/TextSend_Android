@@ -2,9 +2,14 @@
 
  - 手机、电脑文字互传、手机与手机之间文字互传。
  - 安卓版本：8.0+
- - 电脑服务端传送门：[Gitee](https://gitee.com/rmshadows/TextSend_Desktop)   [Github](https://github.com/rmshadows/TextSend_Desktop)
- - uTools插件传送门：[Github](https://github.com/rmshadows/TextSend_Utool)
  - 当前版本：5.0.13
+
+ ### 传送门
+
+ - **Desktop**：[GitHub](https://github.com/rmshadows/TextSend_Desktop) · [Gitee](https://gitee.com/rmshadows/TextSend_Desktop)
+ - **Android**：[GitHub](https://github.com/rmshadows/TextSend_Android) · [Gitee](https://gitee.com/rmshadows/TextSend_Android)
+ - **uTools**：[GitHub](https://github.com/rmshadows/TextSend_Utool)
+ - **iOS / 网页桥（Web）**：[GitHub](https://github.com/rmshadows/Textsend_ios)（计划中；手机用浏览器扫电脑网页桥，非原生 App）
 
 >注意：说明文档虽然是旧的，但是大致用法没变。
 
