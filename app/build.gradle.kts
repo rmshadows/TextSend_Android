@@ -17,15 +17,31 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
-    // CI 通过环境变量传入 keystore。未设置时 release 保持未签名，本地构建行为不变。
-    val releaseKeystore = System.getenv("ANDROID_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+    // CI 写入 signing.properties。没有这份文件时 release 保持未签名，本地构建行为不变。
+    val signingProps = java.util.Properties()
+    val signingPropsPath = System.getenv("ANDROID_SIGNING_PROPERTIES")?.takeIf { it.isNotBlank() }
+    if (signingPropsPath != null) {
+        val propsFile = file(signingPropsPath)
+        if (propsFile.exists()) {
+            propsFile.inputStream().use { signingProps.load(it) }
+        }
+    }
+    fun decodeSigningProp(name: String): String? {
+        val encoded = signingProps.getProperty(name)?.takeIf { it.isNotBlank() } ?: return null
+        return String(java.util.Base64.getDecoder().decode(encoded), Charsets.UTF_8)
+    }
+    val releaseKeystore = signingProps.getProperty("storeFile")?.takeIf { it.isNotBlank() }
+        ?: System.getenv("ANDROID_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
     if (releaseKeystore != null) {
         signingConfigs {
             create("release") {
                 storeFile = file(releaseKeystore)
-                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
-                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+                storePassword = decodeSigningProp("storePasswordB64")
+                    ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = decodeSigningProp("keyAliasB64")
+                    ?: System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = decodeSigningProp("keyPasswordB64")
+                    ?: System.getenv("ANDROID_KEY_PASSWORD")
             }
         }
     }

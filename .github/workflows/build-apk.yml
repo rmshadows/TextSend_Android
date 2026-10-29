@@ -7,7 +7,7 @@
 # 签名用仓库 Secrets，可以先留空。留空时：
 #   - debug APK 用调试证书签名，可以直接安装
 #   - release APK / AAB 未签名，发布文件名带 unsigned
-#   - APKS 用调试证书签名，文件名带 debugkey，便于安装；AAB 仍是未签名
+#   - release APKS 文件名带 unsigned（内部仍是调试证书，方便安装）；AAB 仍是未签名
 # 需要正式签名时，在 Settings → Secrets and variables → Actions 添加：
 #   ANDROID_KEYSTORE_BASE64    keystore 的 base64（base64 -w0 release.keystore）
 #   ANDROID_KEYSTORE_PASSWORD
@@ -103,25 +103,58 @@ jobs:
 
       - name: Decode release keystore
         env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          set -euo pipefail
-          if [ -n "${ANDROID_KEYSTORE_BASE64}" ]; then
-            printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${RUNNER_TEMP}/release.keystore"
-            echo "ANDROID_KEYSTORE_FILE=${RUNNER_TEMP}/release.keystore" >> "${GITHUB_ENV}"
-            echo "Release keystore secret is set; release APK will be signed."
-          else
-            echo "Release keystore secret is empty; release APK will be unsigned. Debug APK is still installable."
-          fi
-
-      - name: Build APK, AAB, and APKS
-        env:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEYSTORE_OUT: ${{ runner.temp }}/release.keystore
+        run: |
+          set -euo pipefail
+          umask 077
+          # 密钥写进文件。放进 env 时，base64 里的换行会把整段变成空值。
+          cat > "${RUNNER_TEMP}/keystore.b64" << 'END_KEYSTORE_B64'
+          ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          END_KEYSTORE_B64
+          tr -d '[:space:]' < "${RUNNER_TEMP}/keystore.b64" > "${RUNNER_TEMP}/keystore.clean"
+          b64_chars="$(wc -c < "${RUNNER_TEMP}/keystore.clean" | tr -d ' ')"
+          echo "ANDROID_KEYSTORE_BASE64 chars=${b64_chars}"
+          echo "ANDROID_KEY_ALIAS set=$([ -n "${ANDROID_KEY_ALIAS}" ] && echo yes || echo no)"
+          echo "ANDROID_KEYSTORE_PASSWORD set=$([ -n "${ANDROID_KEYSTORE_PASSWORD}" ] && echo yes || echo no)"
+          echo "ANDROID_KEY_PASSWORD set=$([ -n "${ANDROID_KEY_PASSWORD}" ] && echo yes || echo no)"
+          if [[ "$b64_chars" -eq 0 ]]; then
+            echo "::warning::仓库 Secrets 里没有 ANDROID_KEYSTORE_BASE64，release 将未签名。请加在 TextSend_Android 的 Settings → Secrets and variables → Actions → Repository secrets，不要加到 Environment 或 Variables。"
+            exit 0
+          fi
+          if [[ -z "${ANDROID_KEY_ALIAS}" || -z "${ANDROID_KEYSTORE_PASSWORD}" || -z "${ANDROID_KEY_PASSWORD}" ]]; then
+            echo "::error::已有 keystore，但 ANDROID_KEY_ALIAS / ANDROID_KEYSTORE_PASSWORD / ANDROID_KEY_PASSWORD 有空值" >&2
+            exit 1
+          fi
+          base64 --decode < "${RUNNER_TEMP}/keystore.clean" > "${KEYSTORE_OUT}"
+          props="${RUNNER_TEMP}/signing.properties"
+          ANDROID_SIGNING_PROPERTIES="$props" python3 - << 'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          def b64(value: str) -> str:
+              return base64.b64encode(value.encode()).decode()
+
+          lines = [
+              f"storeFile={os.environ['KEYSTORE_OUT']}",
+              f"storePasswordB64={b64(os.environ['ANDROID_KEYSTORE_PASSWORD'])}",
+              f"keyAliasB64={b64(os.environ['ANDROID_KEY_ALIAS'])}",
+              f"keyPasswordB64={b64(os.environ['ANDROID_KEY_PASSWORD'])}",
+          ]
+          Path(os.environ["ANDROID_SIGNING_PROPERTIES"]).write_text("\n".join(lines) + "\n")
+          PY
+          echo "ANDROID_SIGNING_PROPERTIES=${props}" >> "${GITHUB_ENV}"
+          echo "ANDROID_KEYSTORE_FILE=${KEYSTORE_OUT}" >> "${GITHUB_ENV}"
+          echo "Release keystore decoded ($(wc -c < "${KEYSTORE_OUT}" | tr -d ' ') bytes)."
+
+      - name: Build APK, AAB, and APKS
         run: |
           set -euo pipefail
           chmod +x ./gradlew
+          ./gradlew --stop || true
           ./gradlew assembleDebug assembleRelease bundleRelease --stacktrace
           shopt -s nullglob
           aabs=(app/build/outputs/bundle/release/*.aab)
@@ -132,15 +165,37 @@ jobs:
           aab="${aabs[0]}"
           curl -fsSL -o "${RUNNER_TEMP}/bundletool.jar" \
             https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar
-          if [[ -n "${ANDROID_KEYSTORE_FILE:-}" ]]; then
+          if [[ -n "${ANDROID_SIGNING_PROPERTIES:-}" && -f "${ANDROID_SIGNING_PROPERTIES}" ]]; then
+            eval "$(python3 - << 'PY'
+          import base64
+          import os
+          import shlex
+          from pathlib import Path
+
+          props = {}
+          for line in Path(os.environ["ANDROID_SIGNING_PROPERTIES"]).read_text().splitlines():
+              if not line or line.startswith("#") or "=" not in line:
+                  continue
+              key, value = line.split("=", 1)
+              props[key] = value
+
+          def dec(name: str) -> str:
+              return base64.b64decode(props[name]).decode()
+
+          print("KS_FILE=" + shlex.quote(props["storeFile"]))
+          print("KS_PASS=" + shlex.quote(dec("storePasswordB64")))
+          print("KS_ALIAS=" + shlex.quote(dec("keyAliasB64")))
+          print("KS_KEYPASS=" + shlex.quote(dec("keyPasswordB64")))
+          PY
+            )"
             apks_out="app/build/outputs/bundle/release/app-release.apks"
             java -jar "${RUNNER_TEMP}/bundletool.jar" build-apks \
               --bundle="$aab" \
               --output="$apks_out" \
-              --ks="${ANDROID_KEYSTORE_FILE}" \
-              --ks-pass="pass:${ANDROID_KEYSTORE_PASSWORD}" \
-              --ks-key-alias="${ANDROID_KEY_ALIAS}" \
-              --key-pass="pass:${ANDROID_KEY_PASSWORD}"
+              --ks="$KS_FILE" \
+              --ks-pass="pass:${KS_PASS}" \
+              --ks-key-alias="$KS_ALIAS" \
+              --key-pass="pass:${KS_KEYPASS}"
           else
             apks_out="app/build/outputs/bundle/release/app-release-unsigned.apks"
             java -jar "${RUNNER_TEMP}/bundletool.jar" build-apks \
