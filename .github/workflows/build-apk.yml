@@ -9,7 +9,7 @@
 #   - release APK / AAB 未签名，发布文件名带 unsigned
 #   - release APKS 文件名带 unsigned（内部仍是调试证书，方便安装）；AAB 仍是未签名
 # 需要正式签名时，在 Settings → Secrets and variables → Actions 添加：
-#   ANDROID_KEYSTORE_BASE64    keystore 的 base64（base64 -w0 release.keystore）
+#   SIGNING_KEYSTORE_BASE64    keystore 的 base64（base64 -w0 release.keystore）
 #   ANDROID_KEYSTORE_PASSWORD
 #   ANDROID_KEY_ALIAS
 #   ANDROID_KEY_PASSWORD
@@ -112,16 +112,16 @@ jobs:
           umask 077
           # 密钥写进文件。放进 env 时，base64 里的换行会把整段变成空值。
           cat > "${RUNNER_TEMP}/keystore.b64" << 'END_KEYSTORE_B64'
-          ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
           END_KEYSTORE_B64
           tr -d '[:space:]' < "${RUNNER_TEMP}/keystore.b64" > "${RUNNER_TEMP}/keystore.clean"
           b64_chars="$(wc -c < "${RUNNER_TEMP}/keystore.clean" | tr -d ' ')"
-          echo "ANDROID_KEYSTORE_BASE64 chars=${b64_chars}"
+          echo "SIGNING_KEYSTORE_BASE64 chars=${b64_chars}"
           echo "ANDROID_KEY_ALIAS set=$([ -n "${ANDROID_KEY_ALIAS}" ] && echo yes || echo no)"
           echo "ANDROID_KEYSTORE_PASSWORD set=$([ -n "${ANDROID_KEYSTORE_PASSWORD}" ] && echo yes || echo no)"
           echo "ANDROID_KEY_PASSWORD set=$([ -n "${ANDROID_KEY_PASSWORD}" ] && echo yes || echo no)"
           if [[ "$b64_chars" -eq 0 ]]; then
-            echo "::warning::仓库 Secrets 里没有 ANDROID_KEYSTORE_BASE64，release 将未签名。请加在 TextSend_Android 的 Settings → Secrets and variables → Actions → Repository secrets，不要加到 Environment 或 Variables。"
+            echo "::warning::仓库 Secrets 里没有 SIGNING_KEYSTORE_BASE64，release 将未签名。请加在 TextSend_Android 的 Settings → Secrets and variables → Actions → Repository secrets，不要加到 Environment 或 Variables。"
             exit 0
           fi
           if [[ -z "${ANDROID_KEY_ALIAS}" || -z "${ANDROID_KEYSTORE_PASSWORD}" || -z "${ANDROID_KEY_PASSWORD}" ]]; then
