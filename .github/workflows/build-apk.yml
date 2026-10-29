@@ -129,28 +129,50 @@ jobs:
             exit 1
           fi
           base64 --decode < "${RUNNER_TEMP}/keystore.clean" > "${KEYSTORE_OUT}"
+          ks_bytes="$(wc -c < "${KEYSTORE_OUT}" | tr -d ' ')"
+          echo "Release keystore decoded (${ks_bytes} bytes)."
+          if [[ "$ks_bytes" -lt 64 ]]; then
+            echo "::error::keystore 解码后过小（${ks_bytes} bytes），SIGNING_KEYSTORE_BASE64 可能不是 keystore 的 base64" >&2
+            exit 1
+          fi
+          # 密码/别名不对时在这里失败，避免 Gradle 里才冒出难读的签名错误
+          if ! keytool -list \
+              -keystore "${KEYSTORE_OUT}" \
+              -storepass "${ANDROID_KEYSTORE_PASSWORD}" \
+              -alias "${ANDROID_KEY_ALIAS}" >/tmp/keytool-alias.txt 2>/tmp/keytool-err.txt; then
+            echo "::error::keystore 打不开或 ANDROID_KEY_ALIAS 不匹配。请核对 ANDROID_KEYSTORE_PASSWORD 与 ANDROID_KEY_ALIAS。" >&2
+            echo "keytool stderr:" >&2
+            cat /tmp/keytool-err.txt >&2 || true
+            echo "keystore 内别名列表（若 store 密码正确）:" >&2
+            keytool -list -keystore "${KEYSTORE_OUT}" -storepass "${ANDROID_KEYSTORE_PASSWORD}" 2>&1 | head -40 >&2 || true
+            exit 1
+          fi
+          echo "keystore alias OK: ${ANDROID_KEY_ALIAS}"
           props="${RUNNER_TEMP}/signing.properties"
-          ANDROID_SIGNING_PROPERTIES="$props" python3 - << 'PY'
-          import base64
-          import os
+          # 用文件跑 Python，避免 run 脚本缩进把 -c 字符串弄坏
+          cat > "${RUNNER_TEMP}/write_signing_props.py" << 'PY'
+          import base64, os
           from pathlib import Path
-
-          def b64(value: str) -> str:
-              return base64.b64encode(value.encode()).decode()
-
+          def b64(v: str) -> str:
+              return base64.b64encode(v.encode()).decode()
           lines = [
-              f"storeFile={os.environ['KEYSTORE_OUT']}",
-              f"storePasswordB64={b64(os.environ['ANDROID_KEYSTORE_PASSWORD'])}",
-              f"keyAliasB64={b64(os.environ['ANDROID_KEY_ALIAS'])}",
-              f"keyPasswordB64={b64(os.environ['ANDROID_KEY_PASSWORD'])}",
+              "storeFile=" + os.environ["KEYSTORE_OUT"],
+              "storePasswordB64=" + b64(os.environ["ANDROID_KEYSTORE_PASSWORD"]),
+              "keyAliasB64=" + b64(os.environ["ANDROID_KEY_ALIAS"]),
+              "keyPasswordB64=" + b64(os.environ["ANDROID_KEY_PASSWORD"]),
           ]
-          Path(os.environ["ANDROID_SIGNING_PROPERTIES"]).write_text("\n".join(lines) + "\n")
+          Path(os.environ["PROPS_OUT"]).write_text("\n".join(lines) + "\n")
           PY
+          PROPS_OUT="$props" python3 "${RUNNER_TEMP}/write_signing_props.py"
           echo "ANDROID_SIGNING_PROPERTIES=${props}" >> "${GITHUB_ENV}"
           echo "ANDROID_KEYSTORE_FILE=${KEYSTORE_OUT}" >> "${GITHUB_ENV}"
-          echo "Release keystore decoded ($(wc -c < "${KEYSTORE_OUT}" | tr -d ' ') bytes)."
 
       - name: Build APK, AAB, and APKS
+        env:
+          # 给 Gradle 兜底；正式签名仍优先读 signing.properties
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           chmod +x ./gradlew
@@ -159,35 +181,31 @@ jobs:
           shopt -s nullglob
           aabs=(app/build/outputs/bundle/release/*.aab)
           if [[ ${#aabs[@]} -ne 1 ]]; then
-            echo "expected 1 release aab, found ${#aabs[@]}" >&2
+            echo "expected 1 release aab, found ${#aabs[@]}:" >&2
+            printf '  %s\n' "${aabs[@]}" >&2 || true
             exit 1
           fi
           aab="${aabs[0]}"
           curl -fsSL -o "${RUNNER_TEMP}/bundletool.jar" \
             https://github.com/google/bundletool/releases/download/1.18.3/bundletool-all-1.18.3.jar
           if [[ -n "${ANDROID_SIGNING_PROPERTIES:-}" && -f "${ANDROID_SIGNING_PROPERTIES}" ]]; then
-            eval "$(python3 - << 'PY'
-          import base64
-          import os
-          import shlex
+            cat > "${RUNNER_TEMP}/read_signing_props.py" << 'PY'
+          import base64, os, shlex
           from pathlib import Path
-
           props = {}
           for line in Path(os.environ["ANDROID_SIGNING_PROPERTIES"]).read_text().splitlines():
               if not line or line.startswith("#") or "=" not in line:
                   continue
               key, value = line.split("=", 1)
               props[key] = value
-
           def dec(name: str) -> str:
               return base64.b64decode(props[name]).decode()
-
           print("KS_FILE=" + shlex.quote(props["storeFile"]))
           print("KS_PASS=" + shlex.quote(dec("storePasswordB64")))
           print("KS_ALIAS=" + shlex.quote(dec("keyAliasB64")))
           print("KS_KEYPASS=" + shlex.quote(dec("keyPasswordB64")))
           PY
-            )"
+            eval "$(python3 "${RUNNER_TEMP}/read_signing_props.py")"
             apks_out="app/build/outputs/bundle/release/app-release.apks"
             java -jar "${RUNNER_TEMP}/bundletool.jar" build-apks \
               --bundle="$aab" \
