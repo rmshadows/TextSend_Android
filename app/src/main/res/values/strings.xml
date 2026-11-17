@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Textsend</string>
     <string name="app_name_full">Textsend for Android</string>
-    <string name="app_version">5.0.13</string>
+    <string name="app_version">5.0.14</string>
     <string name="app_Author">Ryan Yim</string>
     <string name="app_License">GPLv3</string>
     <string name="github">https://github.com/rmshadows/TextSend_Android</string>
@@ -33,7 +33,7 @@
     <string name="messager_send_btn">发送</string>
     <string name="messager_file_btn">文件</string>
     <string name="messager_file_hint">短按打开相册多选，长按打开文件管理器多选</string>
-    <string name="about_help">&lt;b&gt;发文件&lt;/b&gt;&lt;br/&gt;短按「文件」打开相册，长按打开文件管理器。选完先进待发，点「发送」才传。大于 16MB 不拷缓存。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件夹&lt;/b&gt;&lt;br/&gt;长按「发送」，左边打勾可选多个。也可从文件管理器直接分享文件夹。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;接收&lt;/b&gt;&lt;br/&gt;文件在 下载/TextSend。图片也存文件，不进剪贴板。电脑发来的文件夹会按路径重建。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;取消和续传&lt;/b&gt;&lt;br/&gt;取消只停这一轮，待发还在。再发送会续上对面留下的半截。本地点取消「接收」会删半截。连续取消接收 3 次，冷却 10 秒。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;连不上&lt;/b&gt;&lt;br/&gt;先开飞行模式再开 Wi‑Fi，关掉网络加速/双通道。同一 Wi‑Fi，不要开 VPN。已连接时切到后台再分享，会回到当前会话。</string>
+    <string name="about_help">&lt;b&gt;发文件&lt;/b&gt;&lt;br/&gt;短按「文件」打开相册，长按打开文件管理器。选完先进待发，点「发送」才传。大于 16MB 不拷缓存。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件夹&lt;/b&gt;&lt;br/&gt;长按「发送」，左边打勾可选多个。也可从文件管理器直接分享文件夹。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;接收&lt;/b&gt;&lt;br/&gt;文件在 下载/TextSend。图片也存文件，不进剪贴板。电脑发来的文件夹会按路径重建。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;取消和续传&lt;/b&gt;&lt;br/&gt;取消只停这一轮，待发还在。再发送会续上对面留下的半截。本地点取消「接收」会删半截。连续取消接收 3 次，冷却 10 秒。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;连不上&lt;/b&gt;&lt;br/&gt;先开飞行模式再开 Wi‑Fi，关掉网络加速/双通道。同一 Wi‑Fi，不要开 VPN。已连接时切到后台再分享，会回到当前会话。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;局域网探测与授权&lt;/b&gt;&lt;br/&gt;设置里默认关。打开后可发现同一局域网里正在开服的 TextSend。客户端点设备会请求临时授权（TSA1），服务端在列表里允许后免 PIN 连接；可拒绝、拉黑、踢下线。连接和探测默认都用 54300：连接是 TCP，发现设备是 UDP。防火墙如果只放了 TCP，还要放行 UDP 54300，否则手机发过去的探测进不来。可选有连接时停止探测。不广播 PIN。</string>
     <string name="messager_cancel_btn">取消</string>
     <string name="messager_pending_title">待发 %d（点发送才传）</string>
     <string name="messager_pending_remove">从待发列表移除</string>
@@ -69,6 +69,39 @@
     <string name="settings_qr_auto_hint">默认打开。扫到 ts:// 二维码后直接握手，不用再点连接。</string>
     <string name="settings_remember_connection">记住上次连接</string>
     <string name="settings_remember_connection_hint">默认关。PIN 连接成功后记住 IP、端口和 PIN，不记扫码长密钥。</string>
+    <string name="settings_lan_discover">局域网探测</string>
+    <string name="settings_lan_discover_hint">默认关。打开后广播本机正在监听的端口，并列出同一局域网里的其他 TextSend。不发送 PIN。客户端点设备会请求临时授权；服务端允许后免 PIN 连接。两端探测口要一致。</string>
+    <string name="settings_lan_pause">有连接时关闭</string>
+    <string name="settings_lan_pause_hint">默认关。勾选后，已经有一端连上时停止广播和探测。</string>
+    <string name="settings_lan_port">探测端口</string>
+    <string name="settings_lan_port_hint">和连接同一端口号，默认 54300，协议是 UDP。两端要填一样的。防火墙若只放了 TCP，还要放行这个口的 UDP。</string>
+    <string name="settings_lan_port_invalid">探测端口须为 1–65535</string>
+    <string name="settings_auth_rate">授权请求限流（次/分钟）</string>
+    <string name="settings_auth_rate_hint">同一 IP 每分钟最多几次授权请求，默认 3。超限后进入冷却。</string>
+    <string name="settings_auth_rate_invalid">限流须为 1–60</string>
+    <string name="settings_auth_cooldown">拒绝后冷却（秒）</string>
+    <string name="settings_auth_cooldown_hint">拒绝或超限后，该 IP 多久内不再弹出请求，默认 120。填 0 表示不冷却。</string>
+    <string name="settings_auth_cooldown_invalid">冷却须为 0–86400 秒</string>
+    <string name="settings_auth_blacklist">授权黑名单</string>
+    <string name="settings_auth_blacklist_hint">每行一个 IP；也可逗号/空格分隔。黑名单内的请求会被静默拒绝。</string>
+    <string name="client_lan_peers">局域网设备（点一下请求授权）</string>
+    <string name="client_lan_scanning">正在探测…还没看到其他 TextSend</string>
+    <string name="client_lan_manual_idle">手动探测：点右侧「探测」扫一轮</string>
+    <string name="client_lan_probe">探测</string>
+    <string name="client_lan_paused">已连接，探测已暂停</string>
+    <string name="settings_lan_auto">自动探测</string>
+    <string name="settings_lan_manual">手动探测</string>
+    <string name="settings_lan_mode_hint">默认自动，打开探测后持续刷新。选手动后，客户端要点「探测」才扫一轮。</string>
+    <string name="settings_lan_announce">主动广播在线</string>
+    <string name="settings_lan_announce_hint">默认开，大约每 2 秒广播一次。关掉后不主动喊，只在别的设备来探测时回复。</string>
+    <string name="server_auth_pending_title">待授权</string>
+    <string name="server_auth_allow">允许</string>
+    <string name="server_auth_deny">拒绝</string>
+    <string name="server_auth_blacklist">拉黑</string>
+    <string name="server_auth_deny_all">全部拒绝</string>
+    <string name="server_alive_clients_title">已连接</string>
+    <string name="server_kick">踢下线</string>
+    <string name="server_kick_all">全部踢下线</string>
     <string name="settings_custom_pin">固定 PIN</string>
     <string name="settings_custom_pin_hint">开启后每次启动服务端使用同一 8 位 PIN（默认关，随机生成）。</string>
     <string name="settings_custom_pin_input">8 位数字 PIN</string>
@@ -103,6 +136,9 @@
     <string name="settings_inbox_open_ext">用其他应用打开</string>
     <string name="settings_inbox_no_preview">无法在应用内预览\n%1$s\n%2$s\n可点右上角用其他应用打开</string>
     <string name="settings_help">帮助</string>
+    <string name="settings_reset">恢复默认设置</string>
+    <string name="settings_reset_confirm">主题、保活、扫码自动连接、记住的连接、探测、授权和固定 PIN 都会回到默认。发送缓存和已收文件不动。</string>
+    <string name="settings_reset_done">已恢复默认设置</string>
     <string name="keepalive_channel">连接保活</string>
     <string name="keepalive_notification">正在保持连接</string>
 

@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import cn.rmshadows.textsend.FileTransfer
+import cn.rmshadows.textsend.LanAuthGate
 import cn.rmshadows.textsend.PinSettings
 import cn.rmshadows.textsend.KeepAlive
 import protocol.PairingMaterial
@@ -161,6 +162,7 @@ class ServerFragmentViewModel : ViewModel() {
             }
         }, { err ->
             if (gen == serverGen) {
+                LanAuthGate.clearPending(true)
                 viewModel.update(null, null, null, false, null, 0, "", "", err ?: "")
                 tsviewModel.update(null, null, false, null, null, null, -1)
                 KeepAlive.sessionActive = false
@@ -187,6 +189,7 @@ class ServerFragmentViewModel : ViewModel() {
 
     fun stopServer(tsviewModel: TextsendViewModel, viewModel: ServerFragmentViewModel) {
         serverGen++
+        LanAuthGate.clearPending(true)
         TsServer.stopCurrent()
         viewModel.update(null, null, null, false, null, 0, "", "", "")
         tsviewModel.update(null, null, false, null, null, null, -1)

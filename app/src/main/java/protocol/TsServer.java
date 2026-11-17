@@ -8,7 +8,11 @@ import java.net.Socket;
 import java.util.Locale;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -39,7 +43,38 @@ public final class TsServer implements Runnable {
     private final List<TsPeer> peers = new ArrayList<>();
     private final ExecutorService pool = Executors.newCachedThreadPool();
     private final AuthLimiter authLimiter = new AuthLimiter();
+    private final ConcurrentHashMap<String, GrantEntry> lanGrants = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> clientNames = new ConcurrentHashMap<>();
     private ServerSocket serverSocket;
+
+    private static final class GrantEntry {
+        final byte[] psk;
+        final long expireAt;
+
+        GrantEntry(byte[] psk, long expireAt) {
+            this.psk = psk;
+            this.expireAt = expireAt;
+        }
+    }
+
+    public static final class AliveClient {
+        public final String host;
+        public final int port;
+        public final String name;
+
+        AliveClient(String host, int port, String name) {
+            this.host = host;
+            this.port = port;
+            this.name = name == null ? "" : name;
+        }
+
+        public String displayLabel() {
+            if (name != null && !name.isBlank()) {
+                return name + "  ·  " + host;
+            }
+            return host == null ? "" : host;
+        }
+    }
 
     public TsServer(int port, int maxConnections, PairingMaterial material, IntConsumer onClientCount,
                     Consumer<String> onText, Consumer<String> onListenEnded, Runnable onListening) {
@@ -81,6 +116,51 @@ public final class TsServer implements Runnable {
     public static boolean isRunningCurrent() {
         TsServer s = instance;
         return s != null && s.running.get();
+    }
+
+    public static List<AliveClient> listAliveClientsCurrent() {
+        TsServer s = instance;
+        return s == null ? List.of() : s.listAliveClients();
+    }
+
+    public static boolean kickHostCurrent(String host) {
+        TsServer s = instance;
+        return s != null && s.kickHost(host);
+    }
+
+    public static void putLanGrantCurrent(String host, byte[] psk, long ttlMs, String deviceName) {
+        TsServer s = instance;
+        if (s != null) {
+            s.putLanGrant(host, psk, ttlMs, deviceName);
+        }
+    }
+
+    public static void revokeLanGrantCurrent(String host) {
+        TsServer s = instance;
+        if (s != null) {
+            s.revokeLanGrant(host);
+        }
+    }
+
+    public static byte[] peekLanGrantPsk(String host) {
+        TsServer s = instance;
+        return s == null ? null : s.peekGrant(host);
+    }
+
+    public static void consumeLanGrant(String host, byte[] psk) {
+        TsServer s = instance;
+        if (s != null) {
+            s.consumeGrant(host, psk);
+        }
+    }
+
+    /** 正在监听时返回 TCP 端口，否则 -1。探测广播只用这个，不带 PIN。 */
+    public static int listenPortCurrent() {
+        TsServer s = instance;
+        if (s == null || !s.running.get()) {
+            return -1;
+        }
+        return s.port;
     }
 
     public static void setFileIoCurrent(FileIoCallback cb) {
@@ -153,6 +233,8 @@ public final class TsServer implements Runnable {
 
     public void stop() {
         running.set(false);
+        lanGrants.clear();
+        clientNames.clear();
         try {
             if (serverSocket != null) {
                 serverSocket.close();
@@ -239,6 +321,9 @@ public final class TsServer implements Runnable {
     }
 
     private void acceptOne(Socket sock) throws IOException {
+        if (cn.rmshadows.textsend.LanAuth.divertTcp(sock)) {
+            return;
+        }
         String ip = sock.getInetAddress() == null ? "?" : sock.getInetAddress().getHostAddress();
         System.out.println("Log: 【接入】TCP " + ip + ":" + sock.getPort());
         if (!authLimiter.allow(ip)) {
@@ -274,6 +359,113 @@ public final class TsServer implements Runnable {
             pool.execute(peer);
         }
         notifyCount();
+    }
+
+    public void putLanGrant(String host, byte[] psk, long ttlMs, String deviceName) {
+        String h = normalizeHost(host);
+        if (h.isEmpty() || psk == null || psk.length != Protocol.PSK_LEN) {
+            return;
+        }
+        pruneGrants();
+        lanGrants.put(h, new GrantEntry(Arrays.copyOf(psk, psk.length),
+                System.currentTimeMillis() + Math.max(5_000L, ttlMs)));
+        if (deviceName != null && !deviceName.isBlank()) {
+            clientNames.put(h, deviceName.trim());
+        }
+    }
+
+    public void revokeLanGrant(String host) {
+        String h = normalizeHost(host);
+        if (!h.isEmpty()) {
+            lanGrants.remove(h);
+        }
+    }
+
+    byte[] peekGrant(String host) {
+        pruneGrants();
+        String h = normalizeHost(host);
+        if (h.isEmpty()) {
+            return null;
+        }
+        GrantEntry g = lanGrants.get(h);
+        if (g == null || g.expireAt <= System.currentTimeMillis()) {
+            return null;
+        }
+        return Arrays.copyOf(g.psk, g.psk.length);
+    }
+
+    void consumeGrant(String host, byte[] psk) {
+        String h = normalizeHost(host);
+        if (h.isEmpty() || psk == null) {
+            return;
+        }
+        GrantEntry g = lanGrants.get(h);
+        if (g != null && Arrays.equals(g.psk, psk)) {
+            lanGrants.remove(h, g);
+        }
+    }
+
+    private void pruneGrants() {
+        long now = System.currentTimeMillis();
+        for (Iterator<Map.Entry<String, GrantEntry>> it = lanGrants.entrySet().iterator(); it.hasNext(); ) {
+            Map.Entry<String, GrantEntry> e = it.next();
+            if (e.getValue().expireAt <= now) {
+                it.remove();
+            }
+        }
+    }
+
+    public List<AliveClient> listAliveClients() {
+        List<AliveClient> out = new ArrayList<>();
+        synchronized (peers) {
+            for (TsPeer p : peers) {
+                if (!p.isAlive()) {
+                    continue;
+                }
+                String host = normalizeHost(p.remoteHost());
+                String name = clientNames.getOrDefault(host, "");
+                out.add(new AliveClient(host, p.remotePort(), name));
+            }
+        }
+        return out;
+    }
+
+    public boolean kickHost(String host) {
+        String h = normalizeHost(host);
+        if (h.isEmpty()) {
+            return false;
+        }
+        List<TsPeer> hit = new ArrayList<>();
+        synchronized (peers) {
+            for (TsPeer p : peers) {
+                if (h.equals(normalizeHost(p.remoteHost()))) {
+                    hit.add(p);
+                }
+            }
+        }
+        for (TsPeer p : hit) {
+            p.close();
+        }
+        revokeLanGrant(h);
+        clientNames.remove(h);
+        if (!hit.isEmpty()) {
+            notifyCount();
+        }
+        return !hit.isEmpty();
+    }
+
+    public static String normalizeHost(String host) {
+        if (host == null) {
+            return "";
+        }
+        String h = host.trim();
+        if (h.startsWith("[") && h.endsWith("]") && h.length() > 2) {
+            h = h.substring(1, h.length() - 1);
+        }
+        if (h.length() > 7 && h.regionMatches(true, 0, "::ffff:", 0, 7)) {
+            h = h.substring(7);
+        }
+        return h;
     }
 
     /** 给界面看的启动失败原因。权限不足和端口无效不要说成“已被占用”。 */

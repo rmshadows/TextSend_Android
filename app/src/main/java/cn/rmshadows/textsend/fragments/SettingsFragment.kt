@@ -17,6 +17,8 @@ import androidx.core.text.HtmlCompat
 import androidx.fragment.app.Fragment
 import cn.rmshadows.textsend.ClientConnectionSettings
 import cn.rmshadows.textsend.FileTransfer
+import cn.rmshadows.textsend.LanAuthGate
+import cn.rmshadows.textsend.LanDiscover
 import cn.rmshadows.textsend.PinSettings
 import cn.rmshadows.textsend.KeepAlive
 import cn.rmshadows.textsend.R
@@ -54,13 +56,7 @@ class SettingsFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        applying = true
-        binding.keepAliveSwitch.isChecked = KeepAlive.isEnabled()
-        binding.qrAutoSwitch.isChecked = KeepAlive.isQrAutoConnect()
-        binding.rememberConnectionSwitch.isChecked = ClientConnectionSettings.isRememberEnabled()
-        binding.customPinSwitch.isChecked = PinSettings.isEnabled()
-        binding.customPinInput.setText(PinSettings.getPin())
-        applying = false
+        showStoredSettings()
         bindThemeCards()
         binding.keepAliveSwitch.setOnCheckedChangeListener { _, checked ->
             if (applying) {
@@ -89,6 +85,71 @@ class SettingsFragment : Fragment() {
                 return@setOnCheckedChangeListener
             }
             ClientConnectionSettings.setRememberEnabled(checked)
+        }
+        binding.lanDiscoverSwitch.setOnCheckedChangeListener { _, checked ->
+            if (applying) {
+                return@setOnCheckedChangeListener
+            }
+            LanDiscover.setEnabled(checked)
+            binding.lanPauseSwitch.isEnabled = checked
+            binding.lanDiscoverPortInput.isEnabled = checked
+            binding.lanDiscoverMode.isEnabled = checked
+            binding.lanAnnounceSwitch.isEnabled = checked
+        }
+        binding.lanAnnounceSwitch.setOnCheckedChangeListener { _, checked ->
+            if (applying) {
+                return@setOnCheckedChangeListener
+            }
+            LanDiscover.setAnnounce(checked)
+        }
+        binding.lanDiscoverMode.setOnCheckedChangeListener { _, id ->
+            if (applying) {
+                return@setOnCheckedChangeListener
+            }
+            LanDiscover.setAuto(id == R.id.lanDiscoverAuto)
+        }
+        binding.lanPauseSwitch.setOnCheckedChangeListener { _, checked ->
+            if (applying) {
+                return@setOnCheckedChangeListener
+            }
+            LanDiscover.setPauseWhenConnected(checked)
+        }
+        binding.lanDiscoverPortInput.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus || applying) {
+                return@setOnFocusChangeListener
+            }
+            val port = binding.lanDiscoverPortInput.text?.toString()?.trim()?.toIntOrNull()
+            if (port == null || !LanDiscover.setPort(port)) {
+                Toast.makeText(context, R.string.settings_lan_port_invalid, Toast.LENGTH_SHORT).show()
+                binding.lanDiscoverPortInput.setText(LanDiscover.getPort().toString())
+            }
+        }
+        binding.authRateInput.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus || applying) {
+                return@setOnFocusChangeListener
+            }
+            val n = binding.authRateInput.text?.toString()?.trim()?.toIntOrNull()
+            if (n == null || !LanAuthGate.setRatePerMin(n)) {
+                Toast.makeText(context, R.string.settings_auth_rate_invalid, Toast.LENGTH_SHORT).show()
+                binding.authRateInput.setText(LanAuthGate.getRatePerMin().toString())
+            }
+        }
+        binding.authCooldownInput.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus || applying) {
+                return@setOnFocusChangeListener
+            }
+            val n = binding.authCooldownInput.text?.toString()?.trim()?.toIntOrNull()
+            if (n == null || !LanAuthGate.setCooldownSec(n)) {
+                Toast.makeText(context, R.string.settings_auth_cooldown_invalid, Toast.LENGTH_SHORT).show()
+                binding.authCooldownInput.setText(LanAuthGate.getCooldownSec().toString())
+            }
+        }
+        binding.authBlacklistInput.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus || applying) {
+                return@setOnFocusChangeListener
+            }
+            LanAuthGate.setBlacklistText(binding.authBlacklistInput.text?.toString().orEmpty())
+            binding.authBlacklistInput.setText(LanAuthGate.getBlacklistText())
         }
         binding.customPinSwitch.setOnCheckedChangeListener { _, checked ->
             if (applying) {
@@ -138,6 +199,14 @@ class SettingsFragment : Fragment() {
         }
         binding.buttonBrowseInbox.setOnClickListener {
             ReceiveFolder.browse(requireContext())
+        }
+        binding.buttonResetSettings.setOnClickListener {
+            AlertDialog.Builder(requireContext())
+                .setTitle(R.string.settings_reset)
+                .setMessage(R.string.settings_reset_confirm)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.settings_reset) { _, _ -> resetSettings() }
+                .show()
         }
         binding.buttonHelp.setOnClickListener {
             val body = layoutInflater.inflate(R.layout.dialog_help, null)
@@ -192,6 +261,67 @@ class SettingsFragment : Fragment() {
         Toast.makeText(ctx, "打不开系统通知设置", Toast.LENGTH_SHORT).show()
     }
 
+    private fun showStoredSettings() {
+        applying = true
+        binding.keepAliveSwitch.isChecked = KeepAlive.isEnabled()
+        binding.qrAutoSwitch.isChecked = KeepAlive.isQrAutoConnect()
+        binding.rememberConnectionSwitch.isChecked = ClientConnectionSettings.isRememberEnabled()
+        binding.lanDiscoverSwitch.isChecked = LanDiscover.isEnabled()
+        binding.lanPauseSwitch.isChecked = LanDiscover.isPauseWhenConnected()
+        binding.lanPauseSwitch.isEnabled = LanDiscover.isEnabled()
+        binding.lanDiscoverPortInput.setText(LanDiscover.getPort().toString())
+        binding.lanDiscoverPortInput.isEnabled = LanDiscover.isEnabled()
+        binding.lanDiscoverMode.isEnabled = LanDiscover.isEnabled()
+        binding.lanAnnounceSwitch.isChecked = LanDiscover.isAnnounce()
+        binding.lanAnnounceSwitch.isEnabled = LanDiscover.isEnabled()
+        if (LanDiscover.isAuto()) {
+            binding.lanDiscoverAuto.isChecked = true
+        } else {
+            binding.lanDiscoverManual.isChecked = true
+        }
+        binding.authRateInput.setText(LanAuthGate.getRatePerMin().toString())
+        binding.authCooldownInput.setText(LanAuthGate.getCooldownSec().toString())
+        binding.authBlacklistInput.setText(LanAuthGate.getBlacklistText())
+        binding.customPinSwitch.isChecked = PinSettings.isEnabled()
+        binding.customPinInput.setText(PinSettings.getPin())
+        applying = false
+    }
+
+    private fun resetSettings() {
+        val ctx = context ?: return
+        val themeWas = ThemeSettings.get(ctx)
+        ctx.getSharedPreferences("textsend_prefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean("keep_alive", false)
+            .putBoolean("qr_auto_connect", true)
+            .putBoolean("client_remember_enabled", false)
+            .remove("client_last_ip")
+            .remove("client_last_port")
+            .remove("client_last_pin")
+            .putBoolean("lan_discover", false)
+            .putBoolean("lan_discover_auto", true)
+            .putBoolean("lan_discover_announce", true)
+            .putBoolean("lan_discover_pause", false)
+            .putInt("lan_discover_port", 54300)
+            .putInt("auth_rate_per_min", 3)
+            .putInt("auth_cooldown_sec", 120)
+            .putString("auth_blacklist", "")
+            .putBoolean("custom_pin_enabled", false)
+            .putString("custom_pin", "")
+            .commit()
+        KeepAlive.setEnabled(false)
+        LanDiscover.setEnabled(false)
+        showStoredSettings()
+        if (themeWas != ThemeSettings.DEFAULT) {
+            applying = true
+            ThemeSettings.applyChoice(requireActivity(), ThemeSettings.DEFAULT)
+            return
+        }
+        refreshThemeSelection()
+        applying = false
+        Toast.makeText(ctx, R.string.settings_reset_done, Toast.LENGTH_SHORT).show()
+    }
+
     private fun bindThemeCards() {
         val cards = listOf(
             binding.themeDefault to ThemeSettings.DEFAULT,
@@ -209,6 +339,16 @@ class SettingsFragment : Fragment() {
                 ThemeSettings.applyChoice(requireActivity(), id)
             }
         }
+    }
+
+    private fun refreshThemeSelection() {
+        val current = ThemeSettings.get(requireContext())
+        listOf(
+            binding.themeDefault to ThemeSettings.DEFAULT,
+            binding.themeDark to ThemeSettings.DARK,
+            binding.themePaper to ThemeSettings.PAPER,
+            binding.themeSlate to ThemeSettings.SLATE
+        ).forEach { (card, id) -> markThemeCard(card, id == current) }
     }
 
     private fun markThemeCard(card: MaterialCardView, selected: Boolean) {
@@ -232,6 +372,17 @@ class SettingsFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        if (_binding != null && !applying) {
+            val rate = binding.authRateInput.text?.toString()?.trim()?.toIntOrNull()
+            if (rate != null) {
+                LanAuthGate.setRatePerMin(rate)
+            }
+            val cool = binding.authCooldownInput.text?.toString()?.trim()?.toIntOrNull()
+            if (cool != null) {
+                LanAuthGate.setCooldownSec(cool)
+            }
+            LanAuthGate.setBlacklistText(binding.authBlacklistInput.text?.toString().orEmpty())
+        }
         super.onDestroyView()
         _binding = null
     }

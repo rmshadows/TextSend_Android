@@ -8,11 +8,15 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.util.TypedValue
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
@@ -21,12 +25,15 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
+import cn.rmshadows.textsend.LanAuthGate
 import cn.rmshadows.textsend.R
 import cn.rmshadows.textsend.databinding.FragmentServerBinding
 import cn.rmshadows.textsend.viewmodels.ServerFragmentViewModel
 import cn.rmshadows.textsend.viewmodels.TextsendViewModel
+import com.google.android.material.button.MaterialButton
 import com.king.zxing.util.CodeUtils
 import kotlinx.coroutines.launch
+import protocol.TsServer
 import protocol.TsUri
 import java.util.LinkedList
 
@@ -41,6 +48,10 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
     private var spinnerIps: List<String>? = null
     private var spinnerPrefer: String? = null
     private var lastAutoCopiedPsk = ""
+    private var authSig = ""
+    private var aliveSig = ""
+    private var authDialog: AlertDialog? = null
+    private var authDialogHost: String? = null
 
     // This property is only valid between onCreateView and
     // onDestroyView.
@@ -160,6 +171,18 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                             binding.ipPortSpinner.setText(ips[idx], false)
                         }
                     }
+                    refreshAliveClients(it.serverRunning)
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                LanAuthGate.snap.collect { snap ->
+                    if (_binding == null) {
+                        return@collect
+                    }
+                    renderAuthPending(viewModel.uiState.value.serverRunning, snap.pending)
                 }
             }
         }
@@ -258,6 +281,222 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         df.show(childFragmentManager, InputPortNumberDialogFragment.TAG)
     }
 
+    private fun renderAuthPending(serverRunning: Boolean, pending: List<LanAuthGate.PendingItem>) {
+        if (_binding == null) {
+            return
+        }
+        if (!serverRunning || pending.isEmpty()) {
+            authSig = ""
+            binding.authPendingBox.visibility = View.GONE
+            binding.authPendingList.removeAllViews()
+            dismissAuthDialog()
+            return
+        }
+        val sig = pending.joinToString("|") { "${it.host}\u0000${it.name}\u0000${it.at}" }
+        val changed = sig != authSig
+        if (changed || binding.authPendingBox.visibility != View.VISIBLE) {
+            authSig = sig
+            binding.authPendingBox.visibility = View.VISIBLE
+            binding.authPendingTitle.text = getString(R.string.server_auth_pending_title) + " ${pending.size}"
+            binding.authPendingList.removeAllViews()
+            val density = resources.displayMetrics.density
+            for (item in pending) {
+                binding.authPendingList.addView(buildAuthRow(item, density))
+            }
+            if (pending.size > 1) {
+                val denyAll = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
+                denyAll.text = getString(R.string.server_auth_deny_all)
+                denyAll.isAllCaps = false
+                denyAll.layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = (4 * density).toInt() }
+                denyAll.setOnClickListener { LanAuthGate.denyAll() }
+                binding.authPendingList.addView(denyAll)
+            }
+        }
+        // 新请求弹窗，避免只在二维码下面、不滚动就看不到
+        val newest = pending.last()
+        if (changed || authDialogHost != newest.host || authDialog?.isShowing != true) {
+            showAuthDialog(newest)
+        }
+    }
+
+    private fun showAuthDialog(item: LanAuthGate.PendingItem) {
+        if (!isAdded || _binding == null) {
+            return
+        }
+        if (authDialog?.isShowing == true && authDialogHost == item.host) {
+            return
+        }
+        dismissAuthDialog()
+        authDialogHost = item.host
+        authDialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.server_auth_pending_title)
+            .setMessage("${item.name}\n${item.host}")
+            .setPositiveButton(R.string.server_auth_allow) { _, _ ->
+                LanAuthGate.decide(item.host, "allow")
+            }
+            .setNegativeButton(R.string.server_auth_deny) { _, _ ->
+                LanAuthGate.decide(item.host, "deny")
+            }
+            .setNeutralButton(R.string.server_auth_blacklist) { _, _ ->
+                LanAuthGate.decide(item.host, "blacklist")
+            }
+            .setOnDismissListener {
+                if (authDialogHost == item.host) {
+                    authDialog = null
+                    authDialogHost = null
+                }
+            }
+            .setCancelable(true)
+            .show()
+        Toast.makeText(
+            context,
+            getString(R.string.server_auth_pending_title) + "：${item.name}",
+            Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    private fun dismissAuthDialog() {
+        try {
+            authDialog?.dismiss()
+        } catch (_: Exception) {
+        }
+        authDialog = null
+        authDialogHost = null
+    }
+
+    private fun buildAuthRow(item: LanAuthGate.PendingItem, density: Float): View {
+        val col = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (6 * density).toInt() }
+        }
+        val label = TextView(requireContext()).apply {
+            text = "${item.name}  ·  ${item.host}"
+            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium)
+        }
+        col.addView(label)
+        val actions = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+        actions.addView(authActionBtn(R.string.server_auth_allow, density) {
+            LanAuthGate.decide(item.host, "allow")
+        })
+        actions.addView(authActionBtn(R.string.server_auth_deny, density) {
+            LanAuthGate.decide(item.host, "deny")
+        })
+        actions.addView(authActionBtn(R.string.server_auth_blacklist, density) {
+            LanAuthGate.decide(item.host, "blacklist")
+        })
+        col.addView(actions)
+        return col
+    }
+
+    private fun authActionBtn(labelRes: Int, density: Float, onClick: () -> Unit): MaterialButton {
+        val btn = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
+        btn.text = getString(labelRes)
+        btn.isAllCaps = false
+        btn.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+            marginEnd = (4 * density).toInt()
+        }
+        btn.setOnClickListener { onClick() }
+        return btn
+    }
+
+    private fun refreshAliveClients(serverRunning: Boolean) {
+        if (_binding == null) {
+            return
+        }
+        if (!serverRunning) {
+            aliveSig = ""
+            binding.aliveClientsBox.visibility = View.GONE
+            binding.aliveClientsList.removeAllViews()
+            return
+        }
+        val clients = TsServer.listAliveClientsCurrent()
+        if (clients.isEmpty()) {
+            aliveSig = ""
+            binding.aliveClientsBox.visibility = View.GONE
+            binding.aliveClientsList.removeAllViews()
+            return
+        }
+        val max = viewModel.uiState.value.maxConnection.toInt().coerceAtLeast(1)
+        val sig = clients.joinToString("|") { "${it.host}\u0000${it.port}\u0000${it.name}" } + "|$max"
+        if (sig == aliveSig && binding.aliveClientsBox.visibility == View.VISIBLE) {
+            return
+        }
+        aliveSig = sig
+        binding.aliveClientsBox.visibility = View.VISIBLE
+        val title = if (max > 1) {
+            getString(R.string.server_alive_clients_title) + " ${clients.size} / $max"
+        } else {
+            getString(R.string.server_alive_clients_title) + " ${clients.size}"
+        }
+        binding.aliveClientsTitle.text = title
+        binding.aliveClientsList.removeAllViews()
+        val density = resources.displayMetrics.density
+        for (c in clients) {
+            binding.aliveClientsList.addView(buildAliveRow(c, density))
+        }
+        if (clients.size > 1) {
+            val kickAll = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
+            kickAll.text = getString(R.string.server_kick_all)
+            kickAll.isAllCaps = false
+            kickAll.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (4 * density).toInt() }
+            kickAll.setOnClickListener {
+                for (c in TsServer.listAliveClientsCurrent()) {
+                    TsServer.kickHostCurrent(c.host)
+                }
+                aliveSig = ""
+                refreshAliveClients(true)
+            }
+            binding.aliveClientsList.addView(kickAll)
+        }
+    }
+
+    private fun buildAliveRow(client: TsServer.AliveClient, density: Float): View {
+        val row = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (4 * density).toInt() }
+        }
+        val label = TextView(requireContext()).apply {
+            text = client.displayLabel()
+            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium)
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+        }
+        val kick = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
+        kick.text = getString(R.string.server_kick)
+        kick.isAllCaps = false
+        kick.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        kick.setOnClickListener {
+            TsServer.kickHostCurrent(client.host)
+            aliveSig = ""
+            refreshAliveClients(true)
+        }
+        row.addView(label)
+        row.addView(kick)
+        return row
+    }
+
     private fun copyPinUri() {
         val st = viewModel.uiState.value
         if (!st.serverRunning || st.pin.isEmpty()) {
@@ -340,6 +579,7 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
     }
 
     override fun onDestroyView() {
+        dismissAuthDialog()
         super.onDestroyView()
 //        Log.d(Constant.TAG, "onDestroyView: Server ${tsviewModel.uiState.value.uiIndex}")
         // 此处必须检查服务端是去消息界面还是去客户端界面

@@ -11,5 +11,7 @@ class TextsendApp : Application() {
         KeepAlive.init(this)
         PinSettings.init(this)
         ClientConnectionSettings.init(this)
+        LanDiscover.init(this)
+        LanAuthGate.init(this)
     }
 }
