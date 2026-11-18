@@ -23,6 +23,10 @@ object LanAuth {
     const val NAME_MAX = 48
     const val GRANT_TTL_MS = 60_000L
     const val REQUEST_WAIT_MS = 60_000L
+    /** DENY 尾部两个字节：0xFFFF 表示拉黑或服务没开；其余是还能再请求的秒数。 */
+    const val DENY_HARD = 0xFFFF
+
+    class AuthDeniedException(message: String) : IllegalStateException(message)
 
     private val rng = SecureRandom()
     private val waiting = ConcurrentHashMap<ByteBuffer, CompletableFuture<Grant>>()
@@ -93,13 +97,54 @@ object LanAuth {
         return out
     }
 
-    fun encodeDeny(nonce: ByteArray): ByteArray {
-        val out = ByteArray(6 + NONCE_LEN)
+    fun encodeDeny(nonce: ByteArray, waitSec: Int = DENY_HARD): ByteArray {
+        val sec = if (waitSec < 0) DENY_HARD else waitSec.coerceAtMost(DENY_HARD)
+        val out = ByteArray(6 + NONCE_LEN + 2)
         System.arraycopy(MAGIC, 0, out, 0, 4)
         out[4] = VERSION
         out[5] = TYPE_DENY
         System.arraycopy(nonce, 0, out, 6, NONCE_LEN)
+        val o = 6 + NONCE_LEN
+        out[o] = (sec shr 8).toByte()
+        out[o + 1] = sec.toByte()
         return out
+    }
+
+    /** 旧包没有尾部秒数时返回 -1。 */
+    fun denyWaitSec(buf: ByteArray, length: Int): Int {
+        val base = 6 + NONCE_LEN
+        if (length < base + 2) {
+            return -1
+        }
+        return ((buf[base].toInt() and 0xFF) shl 8) or (buf[base + 1].toInt() and 0xFF)
+    }
+
+    fun denyMessage(waitSec: Int): String {
+        if (waitSec < 0) {
+            return "对方拒绝了这次授权。冷却结束后可以再请求，没有拉黑"
+        }
+        if (waitSec == DENY_HARD) {
+            return "对方拒绝了授权"
+        }
+        if (waitSec == 0) {
+            return "对方拒绝了这次授权，可以再请求"
+        }
+        return "对方暂时拒绝，约 $waitSec 秒后可以再请求（没有拉黑）"
+    }
+
+    fun isDenied(e: Throwable?): Boolean {
+        var cur = e
+        while (cur != null) {
+            if (cur is AuthDeniedException) {
+                return true
+            }
+            val m = cur.message
+            if (m != null && (m.contains("拒绝") || m.contains("冷却"))) {
+                return true
+            }
+            cur = cur.cause
+        }
+        return false
     }
 
     fun encodePending(nonce: ByteArray): ByteArray {
@@ -122,7 +167,7 @@ object LanAuth {
         when (type) {
             TYPE_DENY -> {
                 waiting.remove(key)
-                fut.completeExceptionally(IllegalStateException("服务端拒绝了授权"))
+                fut.completeExceptionally(AuthDeniedException(denyMessage(denyWaitSec(buf, length))))
             }
             TYPE_PENDING -> Unit
             TYPE_GRANT -> {
@@ -266,18 +311,21 @@ object LanAuth {
                 throw IllegalStateException("服务端没有按授权回应")
             }
             val type = head[5]
-            val restLen = when (type) {
-                TYPE_GRANT -> NONCE_LEN + Protocol.PSK_LEN + 2 + 4
-                TYPE_DENY -> NONCE_LEN
-                else -> throw IllegalStateException("服务端没有按授权回应")
+            val input = sock.getInputStream()
+            if (type == TYPE_DENY) {
+                val rest = readDenyRest(sock, input)
+                val all = ByteArray(head.size + rest.size)
+                System.arraycopy(head, 0, all, 0, head.size)
+                System.arraycopy(rest, 0, all, head.size, rest.size)
+                throw AuthDeniedException(denyMessage(denyWaitSec(all, all.size)))
             }
-            val rest = readN(sock.getInputStream(), restLen)
+            if (type != TYPE_GRANT) {
+                throw IllegalStateException("服务端没有按授权回应")
+            }
+            val rest = readN(input, NONCE_LEN + Protocol.PSK_LEN + 2 + 4)
             val all = ByteArray(head.size + rest.size)
             System.arraycopy(head, 0, all, 0, head.size)
             System.arraycopy(rest, 0, all, head.size, rest.size)
-            if (type == TYPE_DENY) {
-                throw IllegalStateException("服务端拒绝了授权")
-            }
             val psk = all.copyOfRange(6 + NONCE_LEN, 6 + NONCE_LEN + Protocol.PSK_LEN)
             val o = 6 + NONCE_LEN + Protocol.PSK_LEN
             val port = ((all[o].toInt() and 0xFF) shl 8) or (all[o + 1].toInt() and 0xFF)
@@ -285,6 +333,31 @@ object LanAuth {
         } finally {
             try {
                 sock.close()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun readDenyRest(sock: java.net.Socket, input: java.io.InputStream): ByteArray {
+        val nonce = readN(input, NONCE_LEN)
+        val prev = sock.soTimeout
+        sock.soTimeout = 200
+        try {
+            val extra = ByteArray(2)
+            var n = input.read(extra)
+            if (n == 1) {
+                val n2 = input.read(extra, 1, 1)
+                n = if (n2 < 0) 1 else 2
+            }
+            if (n == 2) {
+                return nonce + extra
+            }
+            return nonce
+        } catch (_: java.net.SocketTimeoutException) {
+            return nonce
+        } finally {
+            try {
+                sock.soTimeout = prev
             } catch (_: Exception) {
             }
         }

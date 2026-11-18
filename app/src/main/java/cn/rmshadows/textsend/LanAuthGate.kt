@@ -17,6 +17,7 @@ object LanAuthGate {
     private const val KEY_COOL = "auth_cooldown_sec"
     private const val KEY_BLACK = "auth_blacklist"
     private const val PENDING_MAX = 16
+    private const val DENY_SOFT_MAX = LanAuth.DENY_HARD - 1
 
     data class PendingItem(val host: String, val name: String, val at: Long, val replyPort: Int)
 
@@ -106,16 +107,19 @@ object LanAuthGate {
         val now = System.currentTimeMillis()
         val until = cooldownUntil[host] ?: 0L
         if (until > now) {
-            denySilent(req)
+            val left = ((until - now + 999) / 1000).toInt().coerceIn(1, DENY_SOFT_MAX)
+            denySilent(req, left)
             return
         }
         if (!noteHit(host, now)) {
-            denySilent(req)
+            val again = cooldownUntil[host] ?: 0L
+            val left = if (again > now) ((again - now + 999) / 1000).toInt().coerceIn(1, DENY_SOFT_MAX) else 0
+            denySilent(req, left)
             return
         }
         val prev = pendingByHost.put(host, Pending(req, now))
         if (prev != null && !prev.req.nonce.contentEquals(req.nonce)) {
-            denySilent(prev.req)
+            denySilent(prev.req, 0)
         }
         trimOverflow()
         if (req.tcpReply == null) {
@@ -164,8 +168,12 @@ object LanAuthGate {
             reply(req, LanAuth.encodeGrant(req.nonce, psk, port, exp))
         } else {
             TsServer.revokeLanGrantCurrent(req.host)
-            denySilent(req)
-            applyCooldown(key)
+            if (action == "blacklist" || isBlacklisted(key)) {
+                denySilent(req, LanAuth.DENY_HARD)
+            } else {
+                applyCooldown(key)
+                denySilent(req, getCooldownSec().coerceIn(0, DENY_SOFT_MAX))
+            }
         }
         publish()
         return true
@@ -194,10 +202,7 @@ object LanAuthGate {
             hits.removeFirst()
         }
         if (hits.size >= limit) {
-            val cool = getCooldownSec()
-            if (cool > 0) {
-                cooldownUntil[host] = now + cool * 1000L
-            }
+            applyCooldown(host)
             return false
         }
         hits.addLast(now)
@@ -213,9 +218,12 @@ object LanAuthGate {
     }
 
     private fun applyCooldown(host: String) {
+        val key = normalizeHost(host)
         val cool = getCooldownSec()
-        if (cool > 0) {
-            cooldownUntil[normalizeHost(host)] = System.currentTimeMillis() + cool * 1000L
+        if (cool > 0 && key.isNotEmpty()) {
+            cooldownUntil[key] = System.currentTimeMillis() + cool * 1000L
+            // 冷却代替滑动窗口。结束后可以再请求，不会和剩余次数叠成一直拒绝。
+            hitsByHost.remove(key)
         }
     }
 
@@ -228,9 +236,9 @@ object LanAuthGate {
         LanDiscover.sendAuthPacket(req.host, req.replyPort, packet)
     }
 
-    private fun denySilent(req: LanAuth.Request?) {
+    private fun denySilent(req: LanAuth.Request?, waitSec: Int = LanAuth.DENY_HARD) {
         if (req == null) return
-        reply(req, LanAuth.encodeDeny(req.nonce))
+        reply(req, LanAuth.encodeDeny(req.nonce, waitSec))
     }
 
     private fun dropBlacklistedPending() {

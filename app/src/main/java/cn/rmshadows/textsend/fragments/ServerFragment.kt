@@ -14,6 +14,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -49,10 +50,9 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
     private var spinnerIps: List<String>? = null
     private var spinnerPrefer: String? = null
     private var lastAutoCopiedPsk = ""
-    private var authSig = ""
-    private var aliveSig = ""
-    private var authDialog: AlertDialog? = null
-    private var authDialogHost: String? = null
+    private var sessionDialog: AlertDialog? = null
+    private var sessionList: LinearLayout? = null
+    private var sessionSig = ""
 
     // This property is only valid between onCreateView and
     // onDestroyView.
@@ -173,7 +173,7 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                             binding.ipPortSpinner.setText(ips[idx], false)
                         }
                     }
-                    refreshAliveClients(it.serverRunning)
+                    updateSessionButton(it.serverRunning)
                 }
             }
         }
@@ -184,7 +184,7 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                     if (_binding == null) {
                         return@collect
                     }
-                    renderAuthPending(viewModel.uiState.value.serverRunning, snap.pending)
+                    updateSessionButton(viewModel.uiState.value.serverRunning)
                 }
             }
         }
@@ -272,6 +272,9 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
             copyPinOnly()
             true
         }
+        binding.sessionButton.setOnClickListener {
+            showSessionDialog()
+        }
         binding.qrImageView.setOnClickListener {
             copyPskUri()
         }
@@ -283,27 +286,82 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         df.show(childFragmentManager, InputPortNumberDialogFragment.TAG)
     }
 
-    private fun renderAuthPending(serverRunning: Boolean, pending: List<LanAuthGate.PendingItem>) {
+    private fun updateSessionButton(serverRunning: Boolean) {
         if (_binding == null) {
             return
         }
-        if (!serverRunning || pending.isEmpty()) {
-            authSig = ""
-            binding.authPendingBox.visibility = View.GONE
-            binding.authPendingList.removeAllViews()
-            dismissAuthDialog()
+        binding.authPendingBox.visibility = View.GONE
+        binding.aliveClientsBox.visibility = View.GONE
+        val pending = if (serverRunning) LanAuthGate.snap.value.pending else emptyList()
+        val alive = if (serverRunning) TsServer.listAliveClientsCurrent() else emptyList()
+        binding.sessionButton.text = when {
+            !serverRunning -> getString(R.string.server_session_idle)
+            pending.isNotEmpty() -> getString(R.string.server_session_pending, pending.size, alive.size)
+            else -> getString(R.string.server_session_online, alive.size)
+        }
+        if (!serverRunning) {
+            dismissSessionDialog()
             return
         }
-        val sig = pending.joinToString("|") { "${it.host}\u0000${it.name}\u0000${it.at}" }
-        val changed = sig != authSig
-        if (changed || binding.authPendingBox.visibility != View.VISIBLE) {
-            authSig = sig
-            binding.authPendingBox.visibility = View.VISIBLE
-            binding.authPendingTitle.text = getString(R.string.server_auth_pending_title) + " ${pending.size}"
-            binding.authPendingList.removeAllViews()
-            val density = resources.displayMetrics.density
+        if (sessionDialog?.isShowing == true) {
+            fillSessionList(pending, alive)
+        }
+    }
+
+    private fun showSessionDialog() {
+        if (!isAdded || _binding == null) {
+            return
+        }
+        if (!viewModel.uiState.value.serverRunning) {
+            Toast.makeText(context, R.string.server_session_need_start, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (sessionDialog?.isShowing == true) {
+            updateSessionButton(true)
+            return
+        }
+        val density = resources.displayMetrics.density
+        val box = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((12 * density).toInt(), (4 * density).toInt(), (12 * density).toInt(), (4 * density).toInt())
+        }
+        sessionList = box
+        val scroll = ScrollView(requireContext()).apply {
+            addView(box)
+        }
+        fillSessionList(LanAuthGate.snap.value.pending, TsServer.listAliveClientsCurrent())
+        sessionDialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.server_session_title)
+            .setView(scroll)
+            .setNegativeButton(R.string.server_session_close, null)
+            .setOnDismissListener {
+                sessionDialog = null
+                sessionList = null
+                sessionSig = ""
+            }
+            .show()
+    }
+
+    private fun fillSessionList(
+        pending: List<LanAuthGate.PendingItem>,
+        alive: List<TsServer.AliveClient>
+    ) {
+        val box = sessionList ?: return
+        val max = viewModel.uiState.value.maxConnection.toInt().coerceAtLeast(1)
+        val sig = pending.joinToString("|") { "${it.host}\u0000${it.name}\u0000${it.at}" } +
+            "#" + alive.joinToString("|") { "${it.host}\u0000${it.port}\u0000${it.name}" } + "|$max"
+        if (sig == sessionSig && box.childCount > 0) {
+            return
+        }
+        sessionSig = sig
+        box.removeAllViews()
+        val density = resources.displayMetrics.density
+        box.addView(sectionTitle(getString(R.string.server_auth_pending_title) + "  ${pending.size}"))
+        if (pending.isEmpty()) {
+            box.addView(mutedLine(getString(R.string.server_session_no_pending)))
+        } else {
             for (item in pending) {
-                binding.authPendingList.addView(buildAuthRow(item, density))
+                box.addView(buildAuthRow(item, density))
             }
             if (pending.size > 1) {
                 val denyAll = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
@@ -314,59 +372,70 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                     LinearLayout.LayoutParams.WRAP_CONTENT
                 ).apply { topMargin = (4 * density).toInt() }
                 denyAll.setOnClickListener { LanAuthGate.denyAll() }
-                binding.authPendingList.addView(denyAll)
+                box.addView(denyAll)
             }
         }
-        // 新请求弹窗，避免只在二维码下面、不滚动就看不到
-        val newest = pending.last()
-        if (changed || authDialogHost != newest.host || authDialog?.isShowing != true) {
-            showAuthDialog(newest)
+        val aliveTitle = if (max > 1) {
+            getString(R.string.server_alive_clients_title) + "  ${alive.size} / $max"
+        } else {
+            getString(R.string.server_alive_clients_title) + "  ${alive.size}"
         }
-    }
-
-    private fun showAuthDialog(item: LanAuthGate.PendingItem) {
-        if (!isAdded || _binding == null) {
-            return
-        }
-        if (authDialog?.isShowing == true && authDialogHost == item.host) {
-            return
-        }
-        dismissAuthDialog()
-        authDialogHost = item.host
-        authDialog = AlertDialog.Builder(requireContext())
-            .setTitle(R.string.server_auth_pending_title)
-            .setMessage("${item.name}\n${item.host}")
-            .setPositiveButton(R.string.server_auth_allow) { _, _ ->
-                LanAuthGate.decide(item.host, "allow")
+        box.addView(sectionTitle(aliveTitle).apply {
+            (layoutParams as LinearLayout.LayoutParams).topMargin = (12 * density).toInt()
+        })
+        if (alive.isEmpty()) {
+            box.addView(mutedLine(getString(R.string.server_session_no_clients)))
+        } else {
+            for (c in alive) {
+                box.addView(buildAliveRow(c, density))
             }
-            .setNegativeButton(R.string.server_auth_deny) { _, _ ->
-                LanAuthGate.decide(item.host, "deny")
-            }
-            .setNeutralButton(R.string.server_auth_blacklist) { _, _ ->
-                LanAuthGate.decide(item.host, "blacklist")
-            }
-            .setOnDismissListener {
-                if (authDialogHost == item.host) {
-                    authDialog = null
-                    authDialogHost = null
+            if (alive.size > 1) {
+                val kickAll = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
+                kickAll.text = getString(R.string.server_kick_all)
+                kickAll.isAllCaps = false
+                kickAll.layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = (4 * density).toInt() }
+                kickAll.setOnClickListener {
+                    for (c in TsServer.listAliveClientsCurrent()) {
+                        TsServer.kickHostCurrent(c.host)
+                    }
+                    sessionSig = ""
+                    updateSessionButton(true)
                 }
+                box.addView(kickAll)
             }
-            .setCancelable(true)
-            .show()
-        Toast.makeText(
-            context,
-            getString(R.string.server_auth_pending_title) + "：${item.name}",
-            Toast.LENGTH_SHORT
-        ).show()
+        }
     }
 
-    private fun dismissAuthDialog() {
+    private fun sectionTitle(text: String): TextView {
+        return TextView(requireContext()).apply {
+            this.text = text
+            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleSmall)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+    }
+
+    private fun mutedLine(text: String): TextView {
+        return TextView(requireContext()).apply {
+            this.text = text
+            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium)
+            alpha = 0.6f
+        }
+    }
+
+    private fun dismissSessionDialog() {
         try {
-            authDialog?.dismiss()
+            sessionDialog?.dismiss()
         } catch (_: Exception) {
         }
-        authDialog = null
-        authDialogHost = null
+        sessionDialog = null
+        sessionList = null
+        sessionSig = ""
     }
 
     private fun buildAuthRow(item: LanAuthGate.PendingItem, density: Float): View {
@@ -413,60 +482,6 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         return btn
     }
 
-    private fun refreshAliveClients(serverRunning: Boolean) {
-        if (_binding == null) {
-            return
-        }
-        if (!serverRunning) {
-            aliveSig = ""
-            binding.aliveClientsBox.visibility = View.GONE
-            binding.aliveClientsList.removeAllViews()
-            return
-        }
-        val clients = TsServer.listAliveClientsCurrent()
-        if (clients.isEmpty()) {
-            aliveSig = ""
-            binding.aliveClientsBox.visibility = View.GONE
-            binding.aliveClientsList.removeAllViews()
-            return
-        }
-        val max = viewModel.uiState.value.maxConnection.toInt().coerceAtLeast(1)
-        val sig = clients.joinToString("|") { "${it.host}\u0000${it.port}\u0000${it.name}" } + "|$max"
-        if (sig == aliveSig && binding.aliveClientsBox.visibility == View.VISIBLE) {
-            return
-        }
-        aliveSig = sig
-        binding.aliveClientsBox.visibility = View.VISIBLE
-        val title = if (max > 1) {
-            getString(R.string.server_alive_clients_title) + " ${clients.size} / $max"
-        } else {
-            getString(R.string.server_alive_clients_title) + " ${clients.size}"
-        }
-        binding.aliveClientsTitle.text = title
-        binding.aliveClientsList.removeAllViews()
-        val density = resources.displayMetrics.density
-        for (c in clients) {
-            binding.aliveClientsList.addView(buildAliveRow(c, density))
-        }
-        if (clients.size > 1) {
-            val kickAll = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
-            kickAll.text = getString(R.string.server_kick_all)
-            kickAll.isAllCaps = false
-            kickAll.layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = (4 * density).toInt() }
-            kickAll.setOnClickListener {
-                for (c in TsServer.listAliveClientsCurrent()) {
-                    TsServer.kickHostCurrent(c.host)
-                }
-                aliveSig = ""
-                refreshAliveClients(true)
-            }
-            binding.aliveClientsList.addView(kickAll)
-        }
-    }
-
     private fun buildAliveRow(client: TsServer.AliveClient, density: Float): View {
         val row = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -491,11 +506,25 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         )
         kick.setOnClickListener {
             TsServer.kickHostCurrent(client.host)
-            aliveSig = ""
-            refreshAliveClients(true)
+            sessionSig = ""
+            updateSessionButton(true)
+        }
+        val block = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
+        block.text = getString(R.string.server_auth_blacklist)
+        block.isAllCaps = false
+        block.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        )
+        block.setOnClickListener {
+            LanAuthGate.addBlacklist(client.host)
+            TsServer.kickHostCurrent(client.host)
+            sessionSig = ""
+            updateSessionButton(true)
         }
         row.addView(label)
         row.addView(kick)
+        row.addView(block)
         return row
     }
 
@@ -581,7 +610,7 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
     }
 
     override fun onDestroyView() {
-        dismissAuthDialog()
+        dismissSessionDialog()
         super.onDestroyView()
 //        Log.d(Constant.TAG, "onDestroyView: Server ${tsviewModel.uiState.value.uiIndex}")
         // 此处必须检查服务端是去消息界面还是去客户端界面

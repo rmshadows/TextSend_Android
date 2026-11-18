@@ -314,7 +314,7 @@ class SettingsFragment : Fragment() {
             .putBoolean("lan_discover", false)
             .putBoolean("lan_discover_auto", true)
             .putBoolean("lan_discover_announce", true)
-            .putBoolean("lan_discover_pause", false)
+            .putBoolean("lan_discover_pause", true)
             .putBoolean("lan_discover_port_follow", true)
             .putInt("lan_discover_port", 54300)
             .putInt("connect_port", 54300)

@@ -23,6 +23,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import cn.rmshadows.textsend.KeepAlive
+import cn.rmshadows.textsend.LanAuth
 import cn.rmshadows.textsend.LanDiscover
 import cn.rmshadows.textsend.R
 import cn.rmshadows.textsend.databinding.FragmentClientBinding
@@ -400,7 +401,7 @@ class ClientFragment : Fragment() {
                 val grant = try {
                     LanDiscover.requestAuthTcp(host, tcpPort)
                 } catch (tcpErr: Exception) {
-                    if (tcpErr.message == "服务端拒绝了授权") {
+                    if (LanAuth.isDenied(tcpErr)) {
                         throw tcpErr
                     }
                     LanDiscover.requestAuth(host, udpPort)

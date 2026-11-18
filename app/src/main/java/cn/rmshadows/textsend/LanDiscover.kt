@@ -42,8 +42,9 @@ object LanDiscover {
     private const val MAGIC = "TSD1"
     private const val VERSION: Byte = 1
     private const val NAME_MAX = 48
-    private const val INTERVAL_MS = 2000L
-    private const val PEER_TTL_MS = 7000L
+    private const val INTERVAL_MS = 1000L
+    /** 超过这个时间没再收到广播就从列表去掉。强杀来不及发下线包，只能靠超时。 */
+    private const val PEER_TTL_MS = 2500L
 
     data class Peer(
         val host: String,
@@ -209,9 +210,9 @@ object LanDiscover {
 
     fun isPauseWhenConnected(): Boolean {
         if (!::app.isInitialized) {
-            return false
+            return true
         }
-        return prefs().getBoolean(KEY_PAUSE, false)
+        return prefs().getBoolean(KEY_PAUSE, true)
     }
 
     fun setPauseWhenConnected(on: Boolean) {
@@ -534,9 +535,6 @@ object LanDiscover {
     }
 
     private fun prune(now: Long) {
-        if (!collectingPeers()) {
-            return
-        }
         synchronized(peers) {
             val it = peers.entries.iterator()
             while (it.hasNext()) {

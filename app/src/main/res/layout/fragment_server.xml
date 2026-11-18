@@ -66,6 +66,15 @@
             tools:text="PIN  12345678"
             tools:visibility="visible" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/sessionButton"
+            style="@style/Widget.Textsend.Button.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/ts_btn"
+            android:layout_marginTop="6dp"
+            android:text="@string/server_session_idle"
+            tools:visibility="visible" />
+
         <LinearLayout
             android:id="@+id/authPendingBox"
             android:layout_width="match_parent"

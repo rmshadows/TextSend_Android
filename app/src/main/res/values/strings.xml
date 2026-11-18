@@ -33,7 +33,7 @@
     <string name="messager_send_btn">发送</string>
     <string name="messager_file_btn">文件</string>
     <string name="messager_file_hint">短按打开相册多选，长按打开文件管理器多选</string>
-    <string name="about_help">&lt;b&gt;发文件&lt;/b&gt;&lt;br/&gt;短按「文件」打开相册，长按打开文件管理器。选完先进待发，点「发送」才传。大于 16MB 不拷缓存。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件夹&lt;/b&gt;&lt;br/&gt;长按「发送」，左边打勾可选多个。也可从文件管理器直接分享文件夹。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;接收&lt;/b&gt;&lt;br/&gt;文件在 下载/TextSend。图片也存文件，不进剪贴板。电脑发来的文件夹会按路径重建。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;取消和续传&lt;/b&gt;&lt;br/&gt;取消只停这一轮，待发还在。再发送会续上对面留下的半截。本地点取消「接收」会删半截。连续取消接收 3 次，冷却 10 秒。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;连不上&lt;/b&gt;&lt;br/&gt;先开飞行模式再开 Wi‑Fi，关掉网络加速/双通道。同一 Wi‑Fi，不要开 VPN。已连接时切到后台再分享，会回到当前会话。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;局域网探测与授权&lt;/b&gt;&lt;br/&gt;设置里默认关。打开后可发现同一局域网里正在开服的 TextSend。客户端点设备会请求临时授权（TSA1），服务端在列表里允许后免 PIN 连接；可拒绝、拉黑、踢下线。连接和探测默认都用 54300：连接是 TCP，发现设备是 UDP。防火墙如果只放了 TCP，还要放行 UDP 54300，否则手机发过去的探测进不来。可选有连接时停止探测。不广播 PIN。</string>
+    <string name="about_help">&lt;b&gt;发文件&lt;/b&gt;&lt;br/&gt;短按「文件」打开相册，长按打开文件管理器。选完先进待发，点「发送」才传。大于 16MB 不拷缓存。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件夹&lt;/b&gt;&lt;br/&gt;长按「发送」，左边打勾可选多个。也可从文件管理器直接分享文件夹。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;接收&lt;/b&gt;&lt;br/&gt;文件在 下载/TextSend。图片也存文件，不进剪贴板。电脑发来的文件夹会按路径重建。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;取消和续传&lt;/b&gt;&lt;br/&gt;取消只停这一轮，待发还在。再发送会续上对面留下的半截。本地点取消「接收」会删半截。连续取消接收 3 次，冷却 10 秒。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;连不上&lt;/b&gt;&lt;br/&gt;先开飞行模式再开 Wi‑Fi，关掉网络加速/双通道。同一 Wi‑Fi，不要开 VPN。已连接时切到后台再分享，会回到当前会话。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;局域网探测与授权&lt;/b&gt;&lt;br/&gt;设置里默认关。打开后可发现同一局域网里正在开服的 TextSend。客户端点设备会请求临时授权（TSA1），服务端在列表里允许后免 PIN 连接；可拒绝、拉黑、踢下线。连接和探测默认都用 54300：连接是 TCP，发现设备是 UDP。防火墙如果只放了 TCP，还要放行 UDP 54300，否则手机发过去的探测进不来。有连接时默认停止探测。不广播 PIN。</string>
     <string name="messager_cancel_btn">取消</string>
     <string name="messager_pending_title">待发 %d（点发送才传）</string>
     <string name="messager_pending_remove">从待发列表移除</string>
@@ -72,7 +72,7 @@
     <string name="settings_lan_discover">局域网探测</string>
     <string name="settings_lan_discover_hint">默认关。打开后广播本机正在监听的端口，并列出同一局域网里的其他 TextSend。不发送 PIN。客户端点设备会请求临时授权；服务端允许后免 PIN 连接。两端探测口要一致。</string>
     <string name="settings_lan_pause">有连接时关闭</string>
-    <string name="settings_lan_pause_hint">默认关。勾选后，已经有一端连上时停止广播和探测。</string>
+    <string name="settings_lan_pause_hint">默认开。已经有一端连上时停止广播和探测。</string>
     <string name="settings_lan_port_follow">探测端口跟随连接端口</string>
     <string name="settings_lan_port_follow_hint">默认开。开着时探测 UDP 口等于服务端监听口 / 客户端填写的对端口，输入框禁用；关掉后才能单独填探测端口。</string>
     <string name="settings_lan_port">探测端口</string>
@@ -95,7 +95,15 @@
     <string name="settings_lan_manual">手动探测</string>
     <string name="settings_lan_mode_hint">默认自动，打开探测后持续刷新。选手动后，客户端要点「探测」才扫一轮。</string>
     <string name="settings_lan_announce">主动广播在线</string>
-    <string name="settings_lan_announce_hint">默认开，大约每 2 秒广播一次。关掉后不主动喊，只在别的设备来探测时回复。</string>
+    <string name="settings_lan_announce_hint">默认开，大约每 1 秒广播一次。关掉后不主动喊，只在别的设备来探测时回复。</string>
+    <string name="server_session_idle">在线 —</string>
+    <string name="server_session_pending">待授权 %1$d · 在线 %2$d</string>
+    <string name="server_session_online">在线 %1$d</string>
+    <string name="server_session_title">在线</string>
+    <string name="server_session_need_start">请先启动服务端</string>
+    <string name="server_session_no_pending">暂无授权请求</string>
+    <string name="server_session_no_clients">还没有客户端</string>
+    <string name="server_session_close">关闭</string>
     <string name="server_auth_pending_title">待授权</string>
     <string name="server_auth_allow">允许</string>
     <string name="server_auth_deny">拒绝</string>
