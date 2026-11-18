@@ -91,10 +91,16 @@ class SettingsFragment : Fragment() {
                 return@setOnCheckedChangeListener
             }
             LanDiscover.setEnabled(checked)
-            binding.lanPauseSwitch.isEnabled = checked
-            binding.lanDiscoverPortInput.isEnabled = checked
+            syncLanPortUi(checked)
             binding.lanDiscoverMode.isEnabled = checked
             binding.lanAnnounceSwitch.isEnabled = checked
+        }
+        binding.lanPortFollowSwitch.setOnCheckedChangeListener { _, checked ->
+            if (applying) {
+                return@setOnCheckedChangeListener
+            }
+            LanDiscover.setPortFollow(checked)
+            syncLanPortUi(LanDiscover.isEnabled())
         }
         binding.lanAnnounceSwitch.setOnCheckedChangeListener { _, checked ->
             if (applying) {
@@ -268,9 +274,8 @@ class SettingsFragment : Fragment() {
         binding.rememberConnectionSwitch.isChecked = ClientConnectionSettings.isRememberEnabled()
         binding.lanDiscoverSwitch.isChecked = LanDiscover.isEnabled()
         binding.lanPauseSwitch.isChecked = LanDiscover.isPauseWhenConnected()
-        binding.lanPauseSwitch.isEnabled = LanDiscover.isEnabled()
-        binding.lanDiscoverPortInput.setText(LanDiscover.getPort().toString())
-        binding.lanDiscoverPortInput.isEnabled = LanDiscover.isEnabled()
+        binding.lanPortFollowSwitch.isChecked = LanDiscover.isPortFollow()
+        syncLanPortUi(LanDiscover.isEnabled())
         binding.lanDiscoverMode.isEnabled = LanDiscover.isEnabled()
         binding.lanAnnounceSwitch.isChecked = LanDiscover.isAnnounce()
         binding.lanAnnounceSwitch.isEnabled = LanDiscover.isEnabled()
@@ -285,6 +290,14 @@ class SettingsFragment : Fragment() {
         binding.customPinSwitch.isChecked = PinSettings.isEnabled()
         binding.customPinInput.setText(PinSettings.getPin())
         applying = false
+    }
+
+    private fun syncLanPortUi(discoverOn: Boolean) {
+        val follow = LanDiscover.isPortFollow()
+        binding.lanPauseSwitch.isEnabled = discoverOn
+        binding.lanPortFollowSwitch.isEnabled = discoverOn
+        binding.lanDiscoverPortInput.setText(LanDiscover.getPort().toString())
+        binding.lanDiscoverPortInput.isEnabled = discoverOn && !follow
     }
 
     private fun resetSettings() {
@@ -302,7 +315,9 @@ class SettingsFragment : Fragment() {
             .putBoolean("lan_discover_auto", true)
             .putBoolean("lan_discover_announce", true)
             .putBoolean("lan_discover_pause", false)
+            .putBoolean("lan_discover_port_follow", true)
             .putInt("lan_discover_port", 54300)
+            .putInt("connect_port", 54300)
             .putInt("auth_rate_per_min", 3)
             .putInt("auth_cooldown_sec", 120)
             .putString("auth_blacklist", "")

@@ -26,6 +26,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import cn.rmshadows.textsend.LanAuthGate
+import cn.rmshadows.textsend.LanDiscover
 import cn.rmshadows.textsend.R
 import cn.rmshadows.textsend.databinding.FragmentServerBinding
 import cn.rmshadows.textsend.viewmodels.ServerFragmentViewModel
@@ -73,6 +74,7 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
 
     override fun onInputPortReceived(input: String) {
         viewModel.update(null, input, null, null, null, null)
+        input.toIntOrNull()?.takeIf { it in 1..65535 }?.let { LanDiscover.setConnectPort(it) }
     }
 
     override fun onCreateView(

@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import cn.rmshadows.textsend.ClientConnectionSettings
 import cn.rmshadows.textsend.FileTransfer
 import cn.rmshadows.textsend.KeepAlive
+import cn.rmshadows.textsend.LanDiscover
 import cn.rmshadows.textsend.LanSocket
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,6 +55,9 @@ class ClientFragmentViewModel(application: Application) : AndroidViewModel(appli
             applyUri(uri)
             return
         }
+        if (port in 1..65535) {
+            LanDiscover.setConnectPort(port)
+        }
         _uiState.update {
             it.copy(
                 serverIp = ip.trim(),
@@ -64,6 +68,9 @@ class ClientFragmentViewModel(application: Application) : AndroidViewModel(appli
     }
 
     fun applyUri(uri: TsUri) {
+        if (uri.port in 1..65535) {
+            LanDiscover.setConnectPort(uri.port)
+        }
         _uiState.update {
             it.copy(
                 serverIp = uri.host,
@@ -110,6 +117,7 @@ class ClientFragmentViewModel(application: Application) : AndroidViewModel(appli
         KeepAlive.sessionActive = true
         TsClient.close()
         TsClient.abort = false
+        LanDiscover.setConnectPort(uri.port)
         val app = getApplication<Application>()
         Thread({
             try {

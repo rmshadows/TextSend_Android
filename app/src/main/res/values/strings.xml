@@ -73,6 +73,8 @@
     <string name="settings_lan_discover_hint">默认关。打开后广播本机正在监听的端口，并列出同一局域网里的其他 TextSend。不发送 PIN。客户端点设备会请求临时授权；服务端允许后免 PIN 连接。两端探测口要一致。</string>
     <string name="settings_lan_pause">有连接时关闭</string>
     <string name="settings_lan_pause_hint">默认关。勾选后，已经有一端连上时停止广播和探测。</string>
+    <string name="settings_lan_port_follow">探测端口跟随连接端口</string>
+    <string name="settings_lan_port_follow_hint">默认开。开着时探测 UDP 口等于服务端监听口 / 客户端填写的对端口，输入框禁用；关掉后才能单独填探测端口。</string>
     <string name="settings_lan_port">探测端口</string>
     <string name="settings_lan_port_hint">和连接同一端口号，默认 54300，协议是 UDP。两端要填一样的。防火墙若只放了 TCP，还要放行这个口的 UDP。</string>
     <string name="settings_lan_port_invalid">探测端口须为 1–65535</string>

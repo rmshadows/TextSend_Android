@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import cn.rmshadows.textsend.FileTransfer
 import cn.rmshadows.textsend.LanAuthGate
+import cn.rmshadows.textsend.LanDiscover
 import cn.rmshadows.textsend.PinSettings
 import cn.rmshadows.textsend.KeepAlive
 import protocol.PairingMaterial
@@ -144,6 +145,7 @@ class ServerFragmentViewModel : ViewModel() {
             update(null, null, null, false, null, 0, "", "", "端口无效（1–65535）")
             return
         }
+        LanDiscover.setConnectPort(port)
         serverGen++
         val gen = serverGen
         TsServer.stopCurrent()

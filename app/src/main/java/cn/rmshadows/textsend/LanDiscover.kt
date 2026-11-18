@@ -25,7 +25,7 @@ import kotlin.concurrent.thread
  * 局域网 UDP 探测。默认关。
  * 包格式（三端一致）：TSD1 | version=1 | tcpPort uint16 BE | nameLen | name | 8 字节实例号。
  * 只广播正在监听的 TCP 端口和设备名，不带 PIN / 密钥。
- * 探测口默认 54300（和 TCP 连接同一端口号，协议仍是 UDP），可改；绑不上时在快照里带占用提示。
+ * 探测口默认跟随连接端口（协议仍是 UDP）；关掉跟随后可单独改。绑不上时在快照里带占用提示。
  * 「有连接时关闭」打开后，已经有会话就停广播、停监听。
  */
 object LanDiscover {
@@ -34,6 +34,8 @@ object LanDiscover {
     private const val KEY_ENABLED = "lan_discover"
     private const val KEY_PAUSE = "lan_discover_pause"
     private const val KEY_PORT = "lan_discover_port"
+    private const val KEY_PORT_FOLLOW = "lan_discover_port_follow"
+    private const val KEY_CONNECT_PORT = "connect_port"
     private const val KEY_AUTO = "lan_discover_auto"
     private const val KEY_ANNOUNCE = "lan_discover_announce"
     private const val MANUAL_PROBE_MS = 8_000L
@@ -219,9 +221,69 @@ object LanDiscover {
         prefs().edit().putBoolean(KEY_PAUSE, on).apply()
     }
 
+    /** 默认开：探测 UDP 口等于连接端口（服务端监听口 / 客户端填写的对端口）。 */
+    fun isPortFollow(): Boolean {
+        if (!::app.isInitialized) {
+            return true
+        }
+        return prefs().getBoolean(KEY_PORT_FOLLOW, true)
+    }
+
+    fun setPortFollow(on: Boolean) {
+        if (!::app.isInitialized) {
+            return
+        }
+        if (isPortFollow() == on) {
+            return
+        }
+        prefs().edit().putBoolean(KEY_PORT_FOLLOW, on).apply()
+        if (on) {
+            prefs().edit().putInt(KEY_PORT, getConnectPort()).apply()
+        }
+        if (isEnabled()) {
+            startLoop()
+        } else {
+            publish(false, false, emptyList(), "", getPort())
+        }
+    }
+
+    /** 主界面连接端口：服务端监听口或客户端填写的对端口。 */
+    fun getConnectPort(): Int {
+        if (!::app.isInitialized) {
+            return DEFAULT_PORT
+        }
+        val live = TsServer.listenPortCurrent()
+        if (live in 1..65535) {
+            return live
+        }
+        val port = prefs().getInt(KEY_CONNECT_PORT, DEFAULT_PORT)
+        return if (port in 1..65535) port else DEFAULT_PORT
+    }
+
+    fun setConnectPort(port: Int) {
+        if (!::app.isInitialized || port !in 1..65535) {
+            return
+        }
+        val prev = prefs().getInt(KEY_CONNECT_PORT, DEFAULT_PORT)
+        if (prev != port) {
+            prefs().edit().putInt(KEY_CONNECT_PORT, port).apply()
+        }
+        if (isPortFollow()) {
+            prefs().edit().putInt(KEY_PORT, port).apply()
+            if (isEnabled() && prev != port) {
+                startLoop()
+            } else if (!isEnabled()) {
+                publish(false, false, emptyList(), "", port)
+            }
+        }
+    }
+
     fun getPort(): Int {
         if (!::app.isInitialized) {
             return DEFAULT_PORT
+        }
+        if (isPortFollow()) {
+            return getConnectPort()
         }
         var port = prefs().getInt(KEY_PORT, DEFAULT_PORT)
         if (port == 54301) {
@@ -234,6 +296,10 @@ object LanDiscover {
     fun setPort(port: Int): Boolean {
         if (!::app.isInitialized || port !in 1..65535) {
             return false
+        }
+        if (isPortFollow()) {
+            // 跟随模式下改探测口无效；实际口始终等于连接口
+            return true
         }
         if (getPort() == port) {
             return true
