@@ -154,6 +154,11 @@ public final class TsServer implements Runnable {
         }
     }
 
+    public static boolean claimLanGrantCurrent(String host, byte[] psk) {
+        TsServer s = instance;
+        return s != null && s.claimGrant(host, psk);
+    }
+
     /** 正在监听时返回 TCP 端口，否则 -1。探测广播只用这个，不带 PIN。 */
     public static int listenPortCurrent() {
         TsServer s = instance;
@@ -432,13 +437,21 @@ public final class TsServer implements Runnable {
     }
 
     void consumeGrant(String host, byte[] psk) {
+        claimGrant(host, psk);
+    }
+
+    boolean claimGrant(String host, byte[] psk) {
         String h = normalizeHost(host);
         if (h.isEmpty() || psk == null) {
-            return;
+            return false;
         }
-        GrantEntry g = lanGrants.get(h);
-        if (g != null && Arrays.equals(g.psk, psk)) {
+        synchronized (lanGrants) {
+            GrantEntry g = lanGrants.get(h);
+            if (g == null || g.expireAt <= System.currentTimeMillis() || !Arrays.equals(g.psk, psk)) {
+                return false;
+            }
             lanGrants.remove(h, g);
+            return true;
         }
     }
 

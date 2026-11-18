@@ -6,9 +6,13 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.inputmethod.EditorInfo
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
@@ -32,6 +36,9 @@ class SettingsFragment : Fragment() {
     private var _binding: FragmentSettingsBinding? = null
     private val binding get() = _binding!!
     private var applying = false
+    /** 设置页黑名单草稿；保存时写回。 */
+    private val blacklistItems = LinkedHashSet<String>()
+    private var blacklistEditing: String? = null
 
     private val notifPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -150,12 +157,15 @@ class SettingsFragment : Fragment() {
                 binding.authCooldownInput.setText(LanAuthGate.getCooldownSec().toString())
             }
         }
-        binding.authBlacklistInput.setOnFocusChangeListener { _, hasFocus ->
-            if (hasFocus || applying) {
-                return@setOnFocusChangeListener
+        binding.authBlacklistAdd.setOnEditorActionListener { _, actionId, event ->
+            val enter = event != null && event.keyCode == KeyEvent.KEYCODE_ENTER
+                    && event.action == KeyEvent.ACTION_DOWN
+            if (actionId == EditorInfo.IME_ACTION_DONE || enter) {
+                commitBlacklistAdd()
+                true
+            } else {
+                false
             }
-            LanAuthGate.setBlacklistText(binding.authBlacklistInput.text?.toString().orEmpty())
-            binding.authBlacklistInput.setText(LanAuthGate.getBlacklistText())
         }
         binding.customPinSwitch.setOnCheckedChangeListener { _, checked ->
             if (applying) {
@@ -286,7 +296,7 @@ class SettingsFragment : Fragment() {
         }
         binding.authRateInput.setText(LanAuthGate.getRatePerMin().toString())
         binding.authCooldownInput.setText(LanAuthGate.getCooldownSec().toString())
-        binding.authBlacklistInput.setText(LanAuthGate.getBlacklistText())
+        loadBlacklistDraft()
         binding.customPinSwitch.isChecked = PinSettings.isEnabled()
         binding.customPinInput.setText(PinSettings.getPin())
         applying = false
@@ -319,7 +329,7 @@ class SettingsFragment : Fragment() {
             .putInt("lan_discover_port", 54300)
             .putInt("connect_port", 54300)
             .putInt("auth_rate_per_min", 3)
-            .putInt("auth_cooldown_sec", 120)
+            .putInt("auth_cooldown_sec", 10)
             .putString("auth_blacklist", "")
             .putBoolean("custom_pin_enabled", false)
             .putString("custom_pin", "")
@@ -386,6 +396,149 @@ class SettingsFragment : Fragment() {
         binding.cacheSizeText.text = getString(R.string.settings_cache_size, FileTransfer.formatBytes(n))
     }
 
+    private fun loadBlacklistDraft() {
+        blacklistItems.clear()
+        blacklistItems.addAll(LanAuthGate.getBlacklist())
+        blacklistEditing = null
+        if (_binding != null) {
+            binding.authBlacklistAdd.setText("")
+        }
+        renderBlacklist()
+    }
+
+    private fun normalizeBlacklistHost(raw: String): String {
+        var h = raw.trim()
+        if (h.startsWith("[") && h.endsWith("]") && h.length > 2) {
+            h = h.substring(1, h.length - 1)
+        }
+        if (h.length > 7 && h.regionMatches(0, "::ffff:", 0, 7, ignoreCase = true)) {
+            h = h.substring(7)
+        }
+        return h.lowercase()
+    }
+
+    private fun commitBlacklistAdd() {
+        if (_binding == null) {
+            return
+        }
+        val next = normalizeBlacklistHost(binding.authBlacklistAdd.text?.toString().orEmpty())
+        if (next.isEmpty()) {
+            blacklistEditing = null
+            binding.authBlacklistAdd.setText("")
+            renderBlacklist()
+            return
+        }
+        blacklistEditing?.let { blacklistItems.remove(it) }
+        blacklistEditing = null
+        blacklistItems.add(next)
+        binding.authBlacklistAdd.setText("")
+        persistBlacklistDraft()
+        renderBlacklist()
+    }
+
+    private fun startBlacklistEdit(host: String) {
+        blacklistEditing = host
+        binding.authBlacklistAdd.setText(host)
+        binding.authBlacklistAdd.setSelection(host.length)
+        binding.authBlacklistAdd.requestFocus()
+        renderBlacklist()
+    }
+
+    private fun removeBlacklistItem(host: String) {
+        blacklistItems.remove(host)
+        if (host == blacklistEditing) {
+            blacklistEditing = null
+            binding.authBlacklistAdd.setText("")
+        }
+        persistBlacklistDraft()
+        renderBlacklist()
+    }
+
+    private fun persistBlacklistDraft() {
+        LanAuthGate.setBlacklist(blacklistItems)
+    }
+
+    private fun renderBlacklist() {
+        if (_binding == null) {
+            return
+        }
+        val box = binding.authBlacklistList
+        box.removeAllViews()
+        val density = resources.displayMetrics.density
+        val visible = blacklistItems.filter { it != blacklistEditing }
+        if (visible.isEmpty()) {
+            val empty = TextView(requireContext())
+            empty.text = getString(R.string.settings_auth_blacklist_empty)
+            empty.setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
+            empty.setPadding(0, (4 * density).toInt(), 0, (4 * density).toInt())
+            box.addView(empty)
+            return
+        }
+        val outline = android.util.TypedValue()
+        requireContext().theme.resolveAttribute(
+            com.google.android.material.R.attr.colorOutline,
+            outline,
+            true
+        )
+        val outlineColor = if (outline.resourceId != 0) {
+            ContextCompat.getColor(requireContext(), outline.resourceId)
+        } else {
+            outline.data
+        }
+        for (host in visible) {
+            val rowBg = android.graphics.drawable.GradientDrawable().apply {
+                setColor(android.graphics.Color.TRANSPARENT)
+                setStroke((1 * density).toInt(), outlineColor)
+            }
+            val row = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                background = rowBg
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                clipChildren = false
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    (44 * density).toInt()
+                ).apply { topMargin = (6 * density).toInt() }
+            }
+            val ipLab = TextView(requireContext()).apply {
+                text = host
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium)
+                gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+                setPadding((10 * density).toInt(), 0, (4 * density).toInt(), 0)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
+                setOnClickListener { startBlacklistEdit(host) }
+            }
+            val onSurface = android.util.TypedValue()
+            requireContext().theme.resolveAttribute(
+                com.google.android.material.R.attr.colorOnSurface,
+                onSurface,
+                true
+            )
+            val delColor = if (onSurface.resourceId != 0) {
+                ContextCompat.getColor(requireContext(), onSurface.resourceId)
+            } else {
+                onSurface.data
+            }
+            val del = TextView(requireContext()).apply {
+                text = "×"
+                contentDescription = getString(R.string.settings_auth_blacklist_delete)
+                gravity = android.view.Gravity.CENTER
+                setTextColor(delColor)
+                textSize = 20f
+                isClickable = true
+                isFocusable = true
+                layoutParams = LinearLayout.LayoutParams(
+                    (44 * density).toInt(),
+                    LinearLayout.LayoutParams.MATCH_PARENT
+                )
+                setOnClickListener { removeBlacklistItem(host) }
+            }
+            row.addView(ipLab)
+            row.addView(del)
+            box.addView(row)
+        }
+    }
+
     override fun onDestroyView() {
         if (_binding != null && !applying) {
             val rate = binding.authRateInput.text?.toString()?.trim()?.toIntOrNull()
@@ -396,7 +549,8 @@ class SettingsFragment : Fragment() {
             if (cool != null) {
                 LanAuthGate.setCooldownSec(cool)
             }
-            LanAuthGate.setBlacklistText(binding.authBlacklistInput.text?.toString().orEmpty())
+            commitBlacklistAdd()
+            persistBlacklistDraft()
         }
         super.onDestroyView()
         _binding = null

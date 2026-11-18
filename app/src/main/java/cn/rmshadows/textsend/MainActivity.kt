@@ -216,6 +216,11 @@ class MainActivity : AppCompatActivity() {
                 true
             }
 
+            R.id.action_help -> {
+                showHelp()
+                true
+            }
+
             R.id.action_about -> {
                 // 如果使用HTMLL:
                 val alertDialogBuilder: AlertDialog.Builder = AlertDialog.Builder(this)
@@ -301,6 +306,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
         return super.onPrepareOptionsMenu(menu)
+    }
+
+    private fun showHelp() {
+        val body = layoutInflater.inflate(R.layout.dialog_help, null)
+        body.findViewById<android.widget.TextView>(R.id.helpBody).text =
+            HtmlCompat.fromHtml(getString(R.string.about_help), HtmlCompat.FROM_HTML_MODE_LEGACY)
+        AlertDialog.Builder(this)
+            .setTitle(R.string.settings_help)
+            .setView(body)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     /** 设置页没有 Client→Server 这条边，硬跳会闪退。先回到主页再切。 */

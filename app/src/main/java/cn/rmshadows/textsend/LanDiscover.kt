@@ -111,17 +111,25 @@ object LanDiscover {
     }
 
     /** 客户端请求临时授权；探测未开或 socket 未就绪时抛错。 */
-    fun requestAuth(host: String, udpPort: Int = getPort()): LanAuth.Grant {
+    fun requestAuth(
+        host: String,
+        udpPort: Int = getPort(),
+        onSas: ((String) -> Unit)? = null
+    ): LanAuth.Grant {
         val sock = socket
         if (sock == null || sock.isClosed) {
             throw IllegalStateException("请先打开局域网探测")
         }
-        return LanAuth.requestAuth(sock, host, udpPort, deviceName(), broadcastTargets())
+        return LanAuth.requestAuth(sock, host, udpPort, deviceName(), broadcastTargets(), onSas)
     }
 
     /** 授权走 TCP 监听口。手机发往电脑的 UDP 经常进不去。 */
-    fun requestAuthTcp(host: String, tcpPort: Int): LanAuth.Grant {
-        return LanAuth.requestAuthTcp(host, tcpPort, deviceName())
+    fun requestAuthTcp(
+        host: String,
+        tcpPort: Int,
+        onSas: ((String) -> Unit)? = null
+    ): LanAuth.Grant {
+        return LanAuth.requestAuthTcp(host, tcpPort, deviceName(), onSas)
     }
 
     fun isEnabled(): Boolean {
@@ -481,6 +489,15 @@ object LanDiscover {
             val type = LanAuth.typeOf(buf, len)
             if (type == LanAuth.TYPE_GRANT || type == LanAuth.TYPE_DENY || type == LanAuth.TYPE_PENDING) {
                 LanAuth.onAuthReply(buf, len)
+                return
+            }
+            if (type == LanAuth.TYPE_CANCEL && LanAuth.isCancel(buf, len)) {
+                val host = src.hostAddress ?: return
+                if (isLocalAddress(host)) {
+                    return
+                }
+                val nonce = buf.copyOfRange(6, 6 + LanAuth.NONCE_LEN)
+                LanAuthGate.drop(host, nonce)
                 return
             }
             if (type == LanAuth.TYPE_REQUEST) {

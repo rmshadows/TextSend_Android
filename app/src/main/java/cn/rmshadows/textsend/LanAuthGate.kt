@@ -5,7 +5,10 @@ import android.content.Context
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import protocol.EcdhP256
 import protocol.TsServer
+import java.security.KeyPair
+import java.security.interfaces.ECPublicKey
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -19,7 +22,13 @@ object LanAuthGate {
     private const val PENDING_MAX = 16
     private const val DENY_SOFT_MAX = LanAuth.DENY_HARD - 1
 
-    data class PendingItem(val host: String, val name: String, val at: Long, val replyPort: Int)
+    data class PendingItem(
+        val host: String,
+        val name: String,
+        val at: Long,
+        val replyPort: Int,
+        val sas: String = ""
+    )
 
     data class Snapshot(val pending: List<PendingItem> = emptyList())
 
@@ -30,7 +39,13 @@ object LanAuthGate {
     private val _snap = MutableStateFlow(Snapshot())
     val snap: StateFlow<Snapshot> = _snap.asStateFlow()
 
-    private data class Pending(val req: LanAuth.Request, val at: Long)
+    private data class Pending(
+        val req: LanAuth.Request,
+        val at: Long,
+        val serverKp: KeyPair,
+        val serverPub: ByteArray,
+        val sas: String
+    )
 
     fun init(application: Application) {
         app = application
@@ -51,8 +66,8 @@ object LanAuthGate {
     }
 
     fun getCooldownSec(): Int {
-        if (!::app.isInitialized) return 120
-        val n = prefs().getInt(KEY_COOL, 120)
+        if (!::app.isInitialized) return 10
+        val n = prefs().getInt(KEY_COOL, 10)
         return n.coerceIn(0, 86400)
     }
 
@@ -62,14 +77,26 @@ object LanAuthGate {
         return true
     }
 
-    fun getBlacklistText(): String {
-        if (!::app.isInitialized) return ""
-        return prefs().getString(KEY_BLACK, "")?.replace(",", "\n")?.trim().orEmpty()
+    fun getBlacklist(): List<String> {
+        if (!::app.isInitialized) return emptyList()
+        val raw = prefs().getString(KEY_BLACK, "") ?: ""
+        if (raw.isBlank()) return emptyList()
+        return raw.split(",").map { normalizeHost(it) }.filter { it.isNotEmpty() }.distinct()
     }
+
+    fun getBlacklistText(): String = getBlacklist().joinToString("\n")
 
     fun setBlacklistText(text: String) {
         if (!::app.isInitialized) return
         val list = text.split(Regex("[,;\\s]+")).map { normalizeHost(it) }.filter { it.isNotEmpty() }.distinct()
+        prefs().edit().putString(KEY_BLACK, list.joinToString(",")).apply()
+        dropBlacklistedPending()
+        publish()
+    }
+
+    fun setBlacklist(hosts: Collection<String>) {
+        if (!::app.isInitialized) return
+        val list = hosts.map { normalizeHost(it) }.filter { it.isNotEmpty() }.distinct()
         prefs().edit().putString(KEY_BLACK, list.joinToString(",")).apply()
         dropBlacklistedPending()
         publish()
@@ -105,31 +132,62 @@ object LanAuthGate {
             return
         }
         val now = System.currentTimeMillis()
-        val until = cooldownUntil[host] ?: 0L
-        if (until > now) {
-            val left = ((until - now + 999) / 1000).toInt().coerceIn(1, DENY_SOFT_MAX)
+        val left = cooldownLeftSec(host, now)
+        if (left > 0) {
             denySilent(req, left)
             return
         }
         if (!noteHit(host, now)) {
-            val again = cooldownUntil[host] ?: 0L
-            val left = if (again > now) ((again - now + 999) / 1000).toInt().coerceIn(1, DENY_SOFT_MAX) else 0
-            denySilent(req, left)
+            denySilent(req, cooldownLeftSec(host, System.currentTimeMillis()))
             return
         }
-        val prev = pendingByHost.put(host, Pending(req, now))
+        if (req.clientPub.size != LanAuth.PUB_LEN) {
+            denySilent(req, 0)
+            return
+        }
+        val serverKp: KeyPair
+        val serverPub: ByteArray
+        val sas: String
+        try {
+            serverKp = EcdhP256.generate()
+            serverPub = EcdhP256.encodePublic(serverKp.public as ECPublicKey)
+            sas = LanAuth.sasCode(req.clientPub, serverPub, req.nonce)
+        } catch (_: Exception) {
+            denySilent(req, 0)
+            return
+        }
+        val pendingPkt = LanAuth.encodePending(req.nonce, serverPub)
+        val prev = pendingByHost.put(host, Pending(req, now, serverKp, serverPub, sas))
         if (prev != null && !prev.req.nonce.contentEquals(req.nonce)) {
             denySilent(prev.req, 0)
         }
         trimOverflow()
-        if (req.tcpReply == null) {
-            LanDiscover.sendAuthPacket(req.host, req.replyPort, LanAuth.encodePending(req.nonce))
+        if (req.tcpReply != null) {
+            req.earlyPending = pendingPkt
+        } else {
+            LanDiscover.sendAuthPacket(req.host, req.replyPort, pendingPkt)
         }
         publish()
     }
 
     fun acceptTcp(req: LanAuth.Request) {
         onRequest(req)
+    }
+
+    /** 客户端取消。对得上这次 nonce 才丢掉，不拒绝、不计冷却。 */
+    fun drop(host: String, nonce: ByteArray?) {
+        val key = normalizeHost(host)
+        val pending = pendingByHost[key] ?: return
+        if (nonce == null || !pending.req.nonce.contentEquals(nonce)) {
+            return
+        }
+        if (pendingByHost.remove(key, pending)) {
+            val reply = pending.req.tcpReply
+            if (reply != null && !reply.isDone) {
+                reply.completeExceptionally(LanAuth.AuthCancelledException())
+            }
+            publish()
+        }
     }
 
     fun listPending(): List<PendingItem> {
@@ -142,7 +200,7 @@ object LanAuthGate {
         }
         return pendingByHost.entries
             .map { (h, p) ->
-                PendingItem(h, p.req.name.ifBlank { "未知设备" }, p.at, p.req.replyPort)
+                PendingItem(h, p.req.name.ifBlank { "未知设备" }, p.at, p.req.replyPort, p.sas)
             }
             .sortedBy { it.at }
     }
@@ -160,12 +218,20 @@ object LanAuthGate {
         val req = pending.req
         val name = req.name.ifBlank { "未知设备" }
         if (action == "allow" && TsServer.isRunningCurrent() && !isBlacklisted(key)) {
-            cooldownUntil.remove(key)
-            val psk = LanAuth.newPsk()
-            val exp = System.currentTimeMillis() + LanAuth.GRANT_TTL_MS
-            TsServer.putLanGrantCurrent(req.host, psk, LanAuth.GRANT_TTL_MS, name)
-            val port = TsServer.listenPortCurrent()
-            reply(req, LanAuth.encodeGrant(req.nonce, psk, port, exp))
+            if (req.clientPub.size != LanAuth.PUB_LEN) {
+                denySilent(req, 0)
+            } else {
+                try {
+                    val psk = LanAuth.deriveGrantPsk(pending.serverKp, req.clientPub, req.nonce)
+                    cooldownUntil.remove(key)
+                    val exp = System.currentTimeMillis() + LanAuth.GRANT_TTL_MS
+                    TsServer.putLanGrantCurrent(req.host, psk, LanAuth.GRANT_TTL_MS, name)
+                    val port = TsServer.listenPortCurrent()
+                    reply(req, LanAuth.encodeGrant(req.nonce, pending.serverPub, port, exp))
+                } catch (_: Exception) {
+                    denySilent(req, 0)
+                }
+            }
         } else {
             TsServer.revokeLanGrantCurrent(req.host)
             if (action == "blacklist" || isBlacklisted(key)) {
@@ -219,12 +285,27 @@ object LanAuthGate {
 
     private fun applyCooldown(host: String) {
         val key = normalizeHost(host)
-        val cool = getCooldownSec()
-        if (cool > 0 && key.isNotEmpty()) {
-            cooldownUntil[key] = System.currentTimeMillis() + cool * 1000L
-            // 冷却代替滑动窗口。结束后可以再请求，不会和剩余次数叠成一直拒绝。
+        if (getCooldownSec() > 0 && key.isNotEmpty()) {
+            // 记下拒绝时刻。剩余时间按当前设置算，120 改成 10 会立刻缩短。
+            cooldownUntil[key] = System.currentTimeMillis()
             hitsByHost.remove(key)
         }
+    }
+
+    private fun cooldownLeftSec(host: String, now: Long): Int {
+        val key = normalizeHost(host)
+        val started = cooldownUntil[key] ?: return 0
+        val cool = getCooldownSec()
+        if (cool <= 0) {
+            cooldownUntil.remove(key)
+            return 0
+        }
+        val until = started + cool * 1000L
+        if (until <= now) {
+            cooldownUntil.remove(key)
+            return 0
+        }
+        return ((until - now + 999) / 1000).toInt().coerceIn(1, DENY_SOFT_MAX)
     }
 
     private fun reply(req: LanAuth.Request, packet: ByteArray) {

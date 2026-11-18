@@ -7,8 +7,10 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.util.TypedValue
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -26,6 +28,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
+import cn.rmshadows.textsend.ButtonFeel
 import cn.rmshadows.textsend.LanAuthGate
 import cn.rmshadows.textsend.LanDiscover
 import cn.rmshadows.textsend.R
@@ -53,6 +56,14 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
     private var sessionDialog: AlertDialog? = null
     private var sessionList: LinearLayout? = null
     private var sessionSig = ""
+    private var sessionTargets: List<SessionTarget> = emptyList()
+    private var sessionCursor = 0
+
+    private class SessionTarget(
+        val pending: Boolean,
+        val host: String,
+        val card: LinearLayout
+    )
 
     // This property is only valid between onCreateView and
     // onDestroyView.
@@ -321,25 +332,65 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
             return
         }
         val density = resources.displayMetrics.density
+        val root = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding((8 * density).toInt(), (4 * density).toInt(), (8 * density).toInt(), (8 * density).toInt())
+        }
         val box = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding((12 * density).toInt(), (4 * density).toInt(), (12 * density).toInt(), (4 * density).toInt())
         }
         sessionList = box
+        root.addView(box, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT
+        ))
+        val close = reviewButton(getString(R.string.server_session_close), true) {
+            dismissSessionDialog()
+        }
+        (close.layoutParams as LinearLayout.LayoutParams).topMargin = (12 * density).toInt()
+        root.addView(close)
         val scroll = ScrollView(requireContext()).apply {
-            addView(box)
+            addView(root)
         }
         fillSessionList(LanAuthGate.snap.value.pending, TsServer.listAliveClientsCurrent())
-        sessionDialog = AlertDialog.Builder(requireContext())
+        val dialog = AlertDialog.Builder(requireContext())
             .setTitle(R.string.server_session_title)
             .setView(scroll)
-            .setNegativeButton(R.string.server_session_close, null)
             .setOnDismissListener {
                 sessionDialog = null
                 sessionList = null
                 sessionSig = ""
+                sessionTargets = emptyList()
+                sessionCursor = 0
             }
-            .show()
+            .create()
+        dialog.setOnKeyListener { _, keyCode, event -> onSessionKey(keyCode, event) }
+        sessionDialog = dialog
+        dialog.show()
+    }
+
+    private fun onSessionKey(keyCode: Int, event: KeyEvent): Boolean {
+        if (event.action != KeyEvent.ACTION_DOWN || event.isCtrlPressed || event.isMetaPressed) {
+            return false
+        }
+        val handled = when (keyCode) {
+            KeyEvent.KEYCODE_Y -> "allow"
+            KeyEvent.KEYCODE_N -> "deny"
+            KeyEvent.KEYCODE_B -> "block"
+            KeyEvent.KEYCODE_K -> "kick"
+            KeyEvent.KEYCODE_DPAD_UP -> "up"
+            KeyEvent.KEYCODE_DPAD_DOWN -> "down"
+            else -> return false
+        }
+        if (event.repeatCount > 0) {
+            return true
+        }
+        when (handled) {
+            "up" -> moveSessionCursor(-1)
+            "down" -> moveSessionCursor(1)
+            else -> sessionAct(handled)
+        }
+        return true
     }
 
     private fun fillSessionList(
@@ -348,30 +399,30 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
     ) {
         val box = sessionList ?: return
         val max = viewModel.uiState.value.maxConnection.toInt().coerceAtLeast(1)
-        val sig = pending.joinToString("|") { "${it.host}\u0000${it.name}\u0000${it.at}" } +
+        val sig = pending.joinToString("|") { "${it.host}\u0000${it.name}\u0000${it.at}\u0000${it.sas}" } +
             "#" + alive.joinToString("|") { "${it.host}\u0000${it.port}\u0000${it.name}" } + "|$max"
         if (sig == sessionSig && box.childCount > 0) {
             return
         }
         sessionSig = sig
         box.removeAllViews()
+        val keepHost = sessionTargets.getOrNull(sessionCursor)?.host
+        val built = ArrayList<SessionTarget>()
         val density = resources.displayMetrics.density
         box.addView(sectionTitle(getString(R.string.server_auth_pending_title) + "  ${pending.size}"))
         if (pending.isEmpty()) {
             box.addView(mutedLine(getString(R.string.server_session_no_pending)))
         } else {
             for (item in pending) {
-                box.addView(buildAuthRow(item, density))
+                val card = buildAuthRow(item)
+                built.add(SessionTarget(true, item.host, card))
+                box.addView(card)
             }
             if (pending.size > 1) {
-                val denyAll = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
-                denyAll.text = getString(R.string.server_auth_deny_all)
-                denyAll.isAllCaps = false
-                denyAll.layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = (4 * density).toInt() }
-                denyAll.setOnClickListener { LanAuthGate.denyAll() }
+                val denyAll = reviewButton(getString(R.string.server_auth_deny_all), true) {
+                    LanAuthGate.denyAll()
+                }
+                (denyAll.layoutParams as LinearLayout.LayoutParams).topMargin = (8 * density).toInt()
                 box.addView(denyAll)
             }
         }
@@ -387,26 +438,36 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
             box.addView(mutedLine(getString(R.string.server_session_no_clients)))
         } else {
             for (c in alive) {
-                box.addView(buildAliveRow(c, density))
+                val card = buildAliveRow(c)
+                built.add(SessionTarget(false, c.host, card))
+                box.addView(card)
             }
             if (alive.size > 1) {
-                val kickAll = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
-                kickAll.text = getString(R.string.server_kick_all)
-                kickAll.isAllCaps = false
-                kickAll.layoutParams = LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = (4 * density).toInt() }
-                kickAll.setOnClickListener {
+                val kickAll = reviewButton(getString(R.string.server_kick_all), true) {
                     for (c in TsServer.listAliveClientsCurrent()) {
                         TsServer.kickHostCurrent(c.host)
                     }
                     sessionSig = ""
                     updateSessionButton(true)
                 }
+                (kickAll.layoutParams as LinearLayout.LayoutParams).topMargin = (8 * density).toInt()
                 box.addView(kickAll)
             }
         }
+        sessionTargets = built
+        val kept = built.indexOfFirst { it.host == keepHost }
+        sessionCursor = when {
+            built.isEmpty() -> 0
+            kept >= 0 -> kept
+            else -> sessionCursor.coerceIn(0, built.lastIndex)
+        }
+        markSessionCursor()
+        box.addView(TextView(requireContext()).apply {
+            text = getString(R.string.server_session_keys)
+            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
+            alpha = 0.65f
+            setPadding(0, (12 * density).toInt(), 0, 0)
+        })
     }
 
     private fun sectionTitle(text: String): TextView {
@@ -438,94 +499,206 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         sessionSig = ""
     }
 
-    private fun buildAuthRow(item: LanAuthGate.PendingItem, density: Float): View {
-        val col = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.VERTICAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = (6 * density).toInt() }
-        }
-        val label = TextView(requireContext()).apply {
-            text = "${item.name}  ·  ${item.host}"
-            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium)
-        }
-        col.addView(label)
-        val actions = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
+    private fun buildAuthRow(item: LanAuthGate.PendingItem): LinearLayout {
+        val hostLine = if (item.sas.isBlank()) item.host else "${item.host}  ·  核对 ${item.sas}"
+        return deviceCard(
+            item.name, hostLine,
+            getString(R.string.server_auth_keys_line),
+            listOf(
+                reviewButton(getString(R.string.server_auth_allow), false, "Y") {
+                    LanAuthGate.decide(item.host, "allow")
+                },
+                reviewButton(getString(R.string.server_auth_deny), false, "N") {
+                    LanAuthGate.decide(item.host, "deny")
+                },
+                reviewButton(getString(R.string.server_auth_blacklist), false, "B") {
+                    LanAuthGate.decide(item.host, "blacklist")
+                }
             )
-        }
-        actions.addView(authActionBtn(R.string.server_auth_allow, density) {
-            LanAuthGate.decide(item.host, "allow")
-        })
-        actions.addView(authActionBtn(R.string.server_auth_deny, density) {
-            LanAuthGate.decide(item.host, "deny")
-        })
-        actions.addView(authActionBtn(R.string.server_auth_blacklist, density) {
-            LanAuthGate.decide(item.host, "blacklist")
-        })
-        col.addView(actions)
-        return col
+        )
     }
 
-    private fun authActionBtn(labelRes: Int, density: Float, onClick: () -> Unit): MaterialButton {
-        val btn = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
-        btn.text = getString(labelRes)
-        btn.isAllCaps = false
-        btn.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-            marginEnd = (4 * density).toInt()
-        }
-        btn.setOnClickListener { onClick() }
-        return btn
+    private fun buildAliveRow(client: TsServer.AliveClient): LinearLayout {
+        val title = client.name.ifBlank { client.host }
+        val host = if (client.name.isBlank()) "" else client.host
+        return deviceCard(
+            title, host,
+            getString(R.string.server_alive_keys_line),
+            listOf(
+                reviewButton(getString(R.string.server_kick), false, "K") {
+                    TsServer.kickHostCurrent(client.host)
+                    sessionSig = ""
+                    updateSessionButton(true)
+                },
+                reviewButton(getString(R.string.server_auth_blacklist), false, "B") {
+                    LanAuthGate.addBlacklist(client.host)
+                    TsServer.kickHostCurrent(client.host)
+                    sessionSig = ""
+                    updateSessionButton(true)
+                }
+            )
+        )
     }
 
-    private fun buildAliveRow(client: TsServer.AliveClient, density: Float): View {
+    private fun moveSessionCursor(delta: Int) {
+        if (sessionTargets.isEmpty()) {
+            return
+        }
+        val n = sessionTargets.size
+        sessionCursor = (sessionCursor + delta + n) % n
+        markSessionCursor()
+    }
+
+    private fun markSessionCursor() {
+        val density = resources.displayMetrics.density
+        val normal = themeColor(com.google.android.material.R.attr.colorOutline)
+        val hot = themeColor(com.google.android.material.R.attr.colorPrimary)
+        sessionTargets.forEachIndexed { index, target ->
+            val bg = target.card.background as? GradientDrawable ?: return@forEachIndexed
+            val on = index == sessionCursor
+            bg.setStroke(((if (on) 2f else 1f) * density).toInt().coerceAtLeast(1), if (on) hot else normal)
+        }
+    }
+
+    private fun sessionAct(action: String) {
+        val target = sessionTargets.getOrNull(sessionCursor)
+        if (target == null) {
+            Toast.makeText(context, R.string.server_key_none, Toast.LENGTH_SHORT).show()
+            return
+        }
+        when (action) {
+            "allow", "deny" -> {
+                if (!target.pending) {
+                    Toast.makeText(context, R.string.server_key_need_pending, Toast.LENGTH_SHORT).show()
+                    return
+                }
+                LanAuthGate.decide(target.host, if (action == "allow") "allow" else "deny")
+            }
+            "block" -> {
+                if (target.pending) {
+                    LanAuthGate.decide(target.host, "blacklist")
+                } else {
+                    LanAuthGate.addBlacklist(target.host)
+                    TsServer.kickHostCurrent(target.host)
+                    sessionSig = ""
+                    updateSessionButton(true)
+                }
+            }
+            "kick" -> {
+                if (target.pending) {
+                    Toast.makeText(context, R.string.server_key_kick_pending, Toast.LENGTH_SHORT).show()
+                    return
+                }
+                TsServer.kickHostCurrent(target.host)
+                sessionSig = ""
+                updateSessionButton(true)
+            }
+        }
+    }
+
+    /** 一台设备一个直角方框。快捷键说明直接写在按钮下面，不靠悬停或长按。 */
+    private fun deviceCard(
+        title: String,
+        host: String,
+        keysLine: String?,
+        buttons: List<MaterialButton>
+    ): LinearLayout {
+        val density = resources.displayMetrics.density
+        val card = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                setColor(themeColor(com.google.android.material.R.attr.colorSurfaceContainerLow))
+                setStroke((1 * density).toInt().coerceAtLeast(1), themeColor(com.google.android.material.R.attr.colorOutline))
+                cornerRadius = 0f
+            }
+            setPadding((12 * density).toInt(), (10 * density).toInt(), (12 * density).toInt(), (10 * density).toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (8 * density).toInt() }
+        }
+        card.addView(TextView(requireContext()).apply {
+            text = title.ifBlank { host }
+            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleSmall)
+        })
+        if (host.isNotBlank() && host != title) {
+            card.addView(TextView(requireContext()).apply {
+                text = host
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
+                alpha = 0.7f
+                setPadding(0, (2 * density).toInt(), 0, 0)
+            })
+        }
         val row = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = android.view.Gravity.CENTER_VERTICAL
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).apply { topMargin = (4 * density).toInt() }
+            ).apply { topMargin = (10 * density).toInt() }
         }
-        val label = TextView(requireContext()).apply {
-            text = client.displayLabel()
-            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium)
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+        buttons.forEachIndexed { index, button ->
+            val lp = button.layoutParams as LinearLayout.LayoutParams
+            if (index > 0) {
+                lp.marginStart = (6 * density).toInt()
+            }
+            row.addView(button)
+        }
+        card.addView(row)
+        if (!keysLine.isNullOrBlank()) {
+            card.addView(TextView(requireContext()).apply {
+                text = keysLine
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
+                alpha = 0.65f
+                setPadding(0, (6 * density).toInt(), 0, 0)
+            })
+        }
+        return card
+    }
+
+    private fun reviewButton(
+        label: String,
+        fillWidth: Boolean,
+        key: String? = null,
+        onClick: () -> Unit
+    ): MaterialButton {
+        val density = resources.displayMetrics.density
+        val height = (40 * density).toInt()
+        return MaterialButton(
+            requireContext(),
+            null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle
+        ).apply {
+            text = if (key.isNullOrBlank()) label else "$label  $key"
+            contentDescription = label
+            isAllCaps = false
+            stateListAnimator = null
+            elevation = 0f
+            shapeAppearanceModel = shapeAppearanceModel.toBuilder().setAllCornerSizes(0f).build()
+            cornerRadius = 0
+            insetTop = 0
+            insetBottom = 0
+            minWidth = 0
+            minimumWidth = 0
+            minHeight = height
+            setPadding((4 * density).toInt(), 0, (4 * density).toInt(), 0)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            layoutParams = if (fillWidth) {
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, height)
+            } else {
+                LinearLayout.LayoutParams(0, height, 1f)
+            }
+            setOnClickListener { onClick() }
+            ButtonFeel.arm(this)
         }
-        val kick = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
-        kick.text = getString(R.string.server_kick)
-        kick.isAllCaps = false
-        kick.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        kick.setOnClickListener {
-            TsServer.kickHostCurrent(client.host)
-            sessionSig = ""
-            updateSessionButton(true)
+    }
+
+    private fun themeColor(attr: Int): Int {
+        val tv = TypedValue()
+        val theme = requireContext().theme
+        if (!theme.resolveAttribute(attr, tv, true)) {
+            return 0xFF888888.toInt()
         }
-        val block = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
-        block.text = getString(R.string.server_auth_blacklist)
-        block.isAllCaps = false
-        block.layoutParams = LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        )
-        block.setOnClickListener {
-            LanAuthGate.addBlacklist(client.host)
-            TsServer.kickHostCurrent(client.host)
-            sessionSig = ""
-            updateSessionButton(true)
-        }
-        row.addView(label)
-        row.addView(kick)
-        row.addView(block)
-        return row
+        return if (tv.resourceId != 0) requireContext().getColor(tv.resourceId) else tv.data
     }
 
     private fun copyPinUri() {
@@ -611,10 +784,14 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
 
     override fun onDestroyView() {
         dismissSessionDialog()
+        val dest = runCatching { findNavController().currentDestination?.id }.getOrNull()
+        // 进聊天或设置时服务还要留着。左上角返回、系统返回回到客户端时要停。
+        val keepRunning = dest == R.id.messengerFragment || dest == R.id.settingsFragment
         super.onDestroyView()
-//        Log.d(Constant.TAG, "onDestroyView: Server ${tsviewModel.uiState.value.uiIndex}")
-        // 此处必须检查服务端是去消息界面还是去客户端界面
-        if(tsviewModel.uiState.value.uiIndex != 3){
+        if (!keepRunning && viewModel.uiState.value.serverRunning) {
+            viewModel.stopServer(tsviewModel, viewModel)
+        }
+        if (!keepRunning && tsviewModel.uiState.value.uiIndex.toInt() != 3) {
             tsviewModel.update(1, false, false, null, null, null, -1)
         }
         _binding = null

@@ -6,14 +6,13 @@ import android.os.Bundle
 import android.animation.ObjectAnimator
 import android.animation.ValueAnimator
 import android.view.LayoutInflater
-import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.graphics.drawable.GradientDrawable
 import android.widget.LinearLayout
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.setFragmentResultListener
@@ -22,6 +21,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
+import cn.rmshadows.textsend.ButtonFeel
 import cn.rmshadows.textsend.KeepAlive
 import cn.rmshadows.textsend.LanAuth
 import cn.rmshadows.textsend.LanDiscover
@@ -30,7 +30,6 @@ import cn.rmshadows.textsend.databinding.FragmentClientBinding
 import cn.rmshadows.textsend.viewmodels.ClientFragmentViewModel
 import cn.rmshadows.textsend.viewmodels.TextsendViewModel
 import com.google.android.material.button.MaterialButton
-import kotlin.math.abs
 import kotlinx.coroutines.launch
 import protocol.TsClient
 import protocol.TsServer
@@ -46,7 +45,11 @@ class ClientFragment : Fragment() {
     private var pendingQrAutoConnect = false
     private var peerSig = ""
     private var authBusy = false
+    private var authWaitHost: String? = null
+    private var authCancelEarly = false
     private var probeBreath: ObjectAnimator? = null
+    /** 等待允许时，设备列表上常驻显示的核对码。 */
+    private val authSasByHost = LinkedHashMap<String, String>()
 
     // This property is only valid between onCreateView and onDestroyView.
     private val binding get() = _binding!!
@@ -214,7 +217,10 @@ class ClientFragment : Fragment() {
         val sig = buildString {
             append(if (snap.probing) "probing" else "idle")
             append(':').append(snap.udpPort).append(':').append(snap.auto).append('|')
-            append(snap.peers.joinToString("|") { "${it.idKey}\u0000${it.name}\u0000${it.host}:${it.tcpPort}" })
+            append(snap.peers.joinToString("|") {
+                val sas = authSasByHost[it.host] ?: authSasByHost[normalizePeerHost(it.host)] ?: ""
+                "${it.idKey}\u0000${it.name}\u0000${it.host}:${it.tcpPort}\u0000$sas"
+            })
         }
         if (sig == peerSig) {
             return
@@ -308,50 +314,54 @@ class ClientFragment : Fragment() {
 
     private fun peerButton(peer: LanDiscover.Peer, density: Float, top: Int): MaterialButton {
         val btn = MaterialButton(requireContext(), null, com.google.android.material.R.attr.materialButtonOutlinedStyle)
-        btn.text = if (peer.name.isBlank()) {
+        val base = if (peer.name.isBlank()) {
             "${peer.host}:${peer.tcpPort}"
         } else {
             "${peer.name}  ${peer.host}:${peer.tcpPort}"
         }
+        val sas = authSasByHost[peer.host] ?: authSasByHost[normalizePeerHost(peer.host)]
+        btn.text = if (sas.isNullOrBlank()) base else "$base\n核对 $sas · 再点取消"
         btn.isAllCaps = false
         btn.cornerRadius = 0
         btn.insetTop = 0
         btn.insetBottom = 0
+        btn.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 14f)
+        btn.isSingleLine = false
+        btn.maxLines = 3
+        btn.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
         btn.layoutParams = LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { topMargin = top }
-        bindTapNotScroll(btn) {
+        ButtonFeel.arm(btn)
+        btn.setOnClickListener {
             requestAuthAndConnect(peer.host, peer.tcpPort)
         }
         return btn
     }
 
-    private fun bindTapNotScroll(view: View, onTap: () -> Unit) {
-        val slop = ViewConfiguration.get(view.context).scaledTouchSlop
-        var downX = 0f
-        var downY = 0f
-        var moved = false
-        view.setOnTouchListener { _, e ->
-            when (e.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    downX = e.x
-                    downY = e.y
-                    moved = false
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    if (abs(e.x - downX) > slop || abs(e.y - downY) > slop) {
-                        moved = true
-                    }
-                }
-                MotionEvent.ACTION_UP -> {
-                    if (!moved) {
-                        onTap()
-                    }
-                }
-            }
-            true
+    private fun normalizePeerHost(host: String): String {
+        return host.trim().lowercase().removePrefix("::ffff:")
+    }
+
+    private fun rememberSas(host: String, code: String) {
+        if (code.isBlank()) {
+            return
         }
+        authSasByHost[host] = code
+        authSasByHost[normalizePeerHost(host)] = code
+        peerSig = ""
+        view?.post {
+            if (isAdded && _binding != null) {
+                renderLanPeers(LanDiscover.snap.value)
+            }
+        }
+    }
+
+    private fun clearSas(host: String) {
+        authSasByHost.remove(host)
+        authSasByHost.remove(normalizePeerHost(host))
+        peerSig = ""
     }
 
     override fun onResume() {
@@ -379,8 +389,13 @@ class ClientFragment : Fragment() {
     }
 
     private fun requestAuthAndConnect(host: String, tcpPort: Int) {
+        if (authBusy && (LanAuth.isWaiting(host) || host == authWaitHost)) {
+            authCancelEarly = true
+            LanAuth.cancelActive()
+            return
+        }
         if (authBusy) {
-            showToast("正在请求授权…")
+            showToast("正在请求授权…再点正在等的那一台可取消")
             return
         }
         if (tsviewModel.uiState.value.connectionStat != -1) {
@@ -392,19 +407,25 @@ class ClientFragment : Fragment() {
             return
         }
         authBusy = true
+        authWaitHost = host
+        authCancelEarly = false
         showToast("正在请求授权 $host…")
         binding.clientIpAddress.setText(host)
         binding.clientPort.setText(tcpPort.toString())
         val udpPort = LanDiscover.getPort()
+        val onSas: (String) -> Unit = { code -> rememberSas(host, code) }
         Thread({
             try {
+                if (authCancelEarly) {
+                    throw LanAuth.AuthCancelledException()
+                }
                 val grant = try {
-                    LanDiscover.requestAuthTcp(host, tcpPort)
+                    LanDiscover.requestAuthTcp(host, tcpPort, onSas)
                 } catch (tcpErr: Exception) {
-                    if (LanAuth.isDenied(tcpErr)) {
+                    if (LanAuth.isDenied(tcpErr) || LanAuth.isCancelled(tcpErr)) {
                         throw tcpErr
                     }
-                    LanDiscover.requestAuth(host, udpPort)
+                    LanDiscover.requestAuth(host, udpPort, onSas)
                 }
                 val port = if (grant.tcpPort > 0) grant.tcpPort else tcpPort
                 val psk = grant.pskB64()
@@ -414,6 +435,8 @@ class ClientFragment : Fragment() {
                         return@post
                     }
                     authBusy = false
+                    clearSas(host)
+                    renderLanPeers(LanDiscover.snap.value)
                     viewModel.applyFields(host, port, psk)
                     binding.clientIpAddress.setText(host)
                     binding.clientPort.setText(port.toString())
@@ -427,22 +450,52 @@ class ClientFragment : Fragment() {
                     }
                 }
             } catch (e: Exception) {
+                if (LanAuth.isCancelled(e)) {
+                    view?.post {
+                        authBusy = false
+                        clearSas(host)
+                        if (_binding != null) {
+                            renderLanPeers(LanDiscover.snap.value)
+                        }
+                        showToast("已取消授权申请")
+                    }
+                    return@Thread
+                }
                 var msg = e.message ?: "授权失败"
                 val cause = e.cause
+                val denied = findDenied(e)
                 if (e is java.util.concurrent.TimeoutException
                     || cause is java.util.concurrent.TimeoutException
                     || e is java.util.concurrent.ExecutionException && cause is java.util.concurrent.TimeoutException
                 ) {
                     msg = "等待服务端允许超时"
+                } else if (denied != null) {
+                    msg = denied.message ?: msg
                 } else if (e is java.util.concurrent.ExecutionException && cause != null) {
                     msg = cause.message ?: msg
                 }
                 val tip = msg
+                val waitSec = denied?.waitSec ?: -1
                 view?.post {
                     authBusy = false
-                    if (isAdded) {
+                    clearSas(host)
+                    if (_binding != null) {
+                        renderLanPeers(LanDiscover.snap.value)
+                    }
+                    if (!isAdded) {
+                        return@post
+                    }
+                    if (waitSec > 0) {
+                        showCooldownDialog(waitSec)
+                    } else if (denied != null) {
+                        showDeniedDialog(tip)
+                    } else {
                         showToast(tip)
                     }
+                }
+            } finally {
+                if (authWaitHost == host) {
+                    authWaitHost = null
                 }
             }
         }, "ts-lan-auth").start()
@@ -462,6 +515,39 @@ class ClientFragment : Fragment() {
             return null
         }
         return clip.getItemAt(0).coerceToText(requireContext())?.toString()
+    }
+
+    private fun findDenied(e: Throwable?): LanAuth.AuthDeniedException? {
+        var cur = e
+        while (cur != null) {
+            if (cur is LanAuth.AuthDeniedException) {
+                return cur
+            }
+            cur = cur.cause
+        }
+        return null
+    }
+
+    private fun showCooldownDialog(waitSec: Int) {
+        if (!isAdded) {
+            return
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("还在冷却")
+            .setMessage("对方刚刚拒绝了授权，大约还有 $waitSec 秒可以再点这个设备。")
+            .setPositiveButton("知道了", null)
+            .show()
+    }
+
+    private fun showDeniedDialog(message: String) {
+        if (!isAdded) {
+            return
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("授权被拒绝")
+            .setMessage(message)
+            .setPositiveButton("知道了", null)
+            .show()
     }
 
     private fun showToast(text: String) {

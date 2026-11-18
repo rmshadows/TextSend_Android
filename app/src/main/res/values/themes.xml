@@ -9,6 +9,9 @@
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="tsFieldStroke">#C4B0FF</item>
+        <item name="tsBtnRipple">#595C00FF</item>
+        <item name="materialButtonStyle">@style/Widget.Textsend.Button</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.Textsend.Button.Outlined</item>
     </style>
 
     <style name="Theme.Textsend" parent="Base.Theme.Textsend" />
@@ -46,6 +49,9 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="tsFieldStroke">#3A3B3F</item>
+        <item name="tsBtnRipple">#66FFFFFF</item>
+        <item name="materialButtonStyle">@style/Widget.Textsend.Button</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.Textsend.Button.Outlined</item>
     </style>
 
     <!-- 纸墨：暖纸底、墨色按钮。 -->
@@ -81,6 +87,9 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="tsFieldStroke">#C9C3B6</item>
+        <item name="tsBtnRipple">#551A1A1A</item>
+        <item name="materialButtonStyle">@style/Widget.Textsend.Button</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.Textsend.Button.Outlined</item>
     </style>
 
     <!-- 石板：深蓝灰底、冷靛蓝。 -->
@@ -116,6 +125,9 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="tsFieldStroke">#2A3142</item>
+        <item name="tsBtnRipple">#669DB4FF</item>
+        <item name="materialButtonStyle">@style/Widget.Textsend.Button</item>
+        <item name="materialButtonOutlinedStyle">@style/Widget.Textsend.Button.Outlined</item>
     </style>
 
     <style name="Widget.Textsend.Button" parent="Widget.Material3.Button">
@@ -124,6 +136,9 @@
         <item name="android:minHeight">@dimen/ts_btn</item>
         <item name="android:minWidth">0dp</item>
         <item name="cornerRadius">10dp</item>
+        <item name="elevation">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="rippleColor">?attr/tsBtnRipple</item>
     </style>
 
     <style name="Widget.Textsend.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
@@ -132,6 +147,9 @@
         <item name="android:minHeight">@dimen/ts_btn</item>
         <item name="android:minWidth">0dp</item>
         <item name="cornerRadius">10dp</item>
+        <item name="elevation">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="rippleColor">?attr/tsBtnRipple</item>
     </style>
 
     <style name="Widget.Textsend.Button.Square" parent="Widget.Material3.Button.OutlinedButton">
@@ -140,6 +158,9 @@
         <item name="android:minHeight">40dp</item>
         <item name="android:minWidth">0dp</item>
         <item name="cornerRadius">0dp</item>
+        <item name="elevation">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="rippleColor">?attr/tsBtnRipple</item>
     </style>
 
     <style name="TextAppearance.Textsend.Hint" parent="TextAppearance.Material3.BodySmall">
@@ -155,6 +176,9 @@
         <item name="android:minWidth">0dp</item>
         <item name="android:paddingStart">8dp</item>
         <item name="android:paddingEnd">8dp</item>
+        <item name="elevation">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="rippleColor">?attr/tsBtnRipple</item>
     </style>
 </resources>
 

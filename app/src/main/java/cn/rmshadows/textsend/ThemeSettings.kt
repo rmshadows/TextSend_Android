@@ -2,6 +2,7 @@ package cn.rmshadows.textsend
 
 import android.app.Activity
 import android.content.Context
+import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 
 /** 设置里选的配色。四个主题共用同一套排版。 */
@@ -32,6 +33,9 @@ object ThemeSettings {
 
     fun applyTo(activity: Activity) {
         activity.setTheme(styleRes(activity))
+        if (activity is AppCompatActivity) {
+            ButtonFeel.install(activity)
+        }
     }
 
     /** 只在 Application 启动时调用，不要在 Activity.onCreate 里改夜间模式。 */
