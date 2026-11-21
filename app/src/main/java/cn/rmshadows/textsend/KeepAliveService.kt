@@ -26,7 +26,11 @@ class KeepAliveService : Service() {
         } else {
             startForeground(NOTIF_ID, notification)
         }
-        return START_STICKY
+        if (!KeepAlive.sessionActive || !KeepAlive.isEnabled()) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
+        return START_NOT_STICKY
     }
 
     private fun ensureChannel() {

@@ -1,13 +1,18 @@
 package cn.rmshadows.textsend
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.content.IntentCompat
 import androidx.core.text.HtmlCompat
 import androidx.lifecycle.Lifecycle
@@ -32,6 +37,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: TextsendViewModel
+    private var shareAgain: ShareJob? = null
+
+    private val audioReadPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val job = shareAgain
+        shareAgain = null
+        if (job == null) {
+            return@registerForActivityResult
+        }
+        if (!granted) {
+            Toast.makeText(this, "没有读取音频的权限，分享的录音加不进来", Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+        enqueueShare(job, asked = true)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         ThemeSettings.applyTo(this)
@@ -105,6 +126,13 @@ class MainActivity : AppCompatActivity() {
                 ?: intent.clipData?.description?.label?.toString()
         )
         val uris = shareUris(intent)
+        val grant = intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0
+        android.util.Log.i(
+            "Textsend",
+            "share: action=$action type=${intent.type} grant=$grant " +
+                "uris=${uris.joinToString(" | ").ifBlank { "-" }} " +
+                "extras=${intent.extras?.keySet()?.joinToString(",") ?: "-"}"
+        )
         if (uris.isEmpty()) {
             return
         }
@@ -119,23 +147,31 @@ class MainActivity : AppCompatActivity() {
         intent.action = Intent.ACTION_MAIN
         intent.removeExtra(Intent.EXTRA_STREAM)
         intent.data = null
+        enqueueShare(ShareJob(uris, hint, intent.type), asked = false)
+    }
+
+    private fun enqueueShare(job: ShareJob, asked: Boolean) {
         val app = applicationContext
         Toast.makeText(this, "正在加入待发…", Toast.LENGTH_SHORT).show()
         Thread({
             var added = 0
             var overflow = false
             var folderName: String? = null
-            val asFolder = FileTransfer.ingestShareAsFolder(app, uris, hint)
+            val asFolder = FileTransfer.ingestShareAsFolder(app, job.uris, job.hint)
             if (asFolder != null) {
                 folderName = asFolder.first
                 added = asFolder.second
             } else {
-                for (uri in uris) {
+                for (uri in job.uris) {
                     if (FileTransfer.flatCount() >= Protocol.FILE_BATCH_MAX) {
                         overflow = true
                         break
                     }
-                    val item = FileTransfer.ingest(app, uri) ?: continue
+                    val item = FileTransfer.ingest(app, uri)
+                    if (item == null) {
+                        android.util.Log.w("Textsend", "share: ingest null $uri")
+                        continue
+                    }
                     if (FileTransfer.add(item)) {
                         added++
                     }
@@ -145,6 +181,11 @@ class MainActivity : AppCompatActivity() {
             val over = overflow
             val folder = folderName
             runOnUiThread {
+                if (a == 0 && !over && !asked && audioPermissionMissing(job)) {
+                    shareAgain = job
+                    audioReadPermission.launch(audioPermissionName())
+                    return@runOnUiThread
+                }
                 if (a == 0 && !over) {
                     Toast.makeText(
                         this,
@@ -168,6 +209,36 @@ class MainActivity : AppCompatActivity() {
             }
         }, "ts-share-ingest").start()
     }
+
+    private fun audioPermissionMissing(job: ShareJob): Boolean {
+        if (ContextCompat.checkSelfPermission(this, audioPermissionName()) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        if (job.type?.startsWith("audio/") == true) {
+            return true
+        }
+        val exts = listOf(".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".opus", ".amr", ".3gp", ".wma")
+        return job.uris.any { uri ->
+            val n = Uri.decode(uri.toString()).lowercase()
+            exts.any { ext -> n.endsWith(ext) }
+        }
+    }
+
+    private fun audioPermissionName(): String {
+        return if (Build.VERSION.SDK_INT >= 33) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+    }
+
+    private data class ShareJob(
+        val uris: List<Uri>,
+        val hint: String?,
+        val type: String?
+    )
 
     private fun shareUris(intent: Intent): List<Uri> {
         val out = LinkedHashSet<Uri>()

@@ -31,9 +31,12 @@
 
     <!--  消息发送  -->
     <string name="messager_send_btn">发送</string>
-    <string name="messager_file_btn">文件</string>
-    <string name="messager_file_hint">短按打开相册多选，长按打开文件管理器多选</string>
-    <string name="about_help">&lt;b&gt;按钮&lt;/b&gt;&lt;br/&gt;「文件」短按打开相册，长按打开文件管理器。选完只进待发。&lt;br/&gt;「发送」才真正传出去：有待发就发文件，否则发输入框里的文字。长按「发送」可选文件夹。&lt;br/&gt;「取消」只停这一轮，待发还在。&lt;br/&gt;「清空」拿掉待发，不删已经收到的文件。&lt;br/&gt;服务端「启动服务」开始等人连；「在线」里对待授权先对核对码，再点允许 / 拒绝 / 拉黑。已连接可踢下线。按钮下面写着外接键盘的字母，不用长按。&lt;br/&gt;客户端「粘贴 ts://」填连接串，「连接」开始连。探测开着时，点列表里的设备会请求授权。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件&lt;/b&gt;&lt;br/&gt;短按「文件」打开相册，长按打开文件管理器。选完先进待发，点「发送」才传。大于 16MB 不拷缓存。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件夹&lt;/b&gt;&lt;br/&gt;长按「发送」，左边打勾可选多个。也可从文件管理器直接分享文件夹。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;接收&lt;/b&gt;&lt;br/&gt;文件在 下载/TextSend。图片也存文件，不进剪贴板。电脑发来的文件夹会按路径重建。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;取消和续传&lt;/b&gt;&lt;br/&gt;取消只停这一轮，待发还在。再发送会续上对面留下的半截。本地点取消「接收」会删半截。连续取消接收 3 次，冷却 10 秒。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;连不上&lt;/b&gt;&lt;br/&gt;先开飞行模式再开 Wi‑Fi，关掉网络加速/双通道。同一 Wi‑Fi，不要开 VPN。已连接时切到后台再分享，会回到当前会话。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;局域网探测与授权&lt;/b&gt;&lt;br/&gt;设置里默认关。打开后可发现同一局域网里正在开服的 TextSend。客户端点设备会请求临时授权（TSA1），两边显示同一串核对码，对得上再允许；可拒绝、拉黑、踢下线。连接和探测默认都用 54300：连接是 TCP，发现设备是 UDP。防火墙如果只放了 TCP，还要放行 UDP 54300，否则手机发过去的探测进不来。有连接时默认停止探测。不广播 PIN。</string>
+    <string name="messager_send_long">文件夹</string>
+    <string name="messager_send_hint">短按发送。按住变成「文件夹」后，手指还在按钮上松开才进入；滑出按钮即取消</string>
+    <string name="messager_file_btn">图片</string>
+    <string name="messager_file_long">文件</string>
+    <string name="messager_file_hint">短按选图片。按住变成「文件」后，手指还在按钮上松开才进入；滑出按钮即取消</string>
+    <string name="about_help">&lt;b&gt;按钮&lt;/b&gt;&lt;br/&gt;「图片」短按打开相册。按住时字和颜色变成「文件」，手指还在按钮上松开才打开文件管理器，滑出即取消。选完只进待发。&lt;br/&gt;「发送」才真正传出去：有待发就发文件，否则发输入框里的文字。按住「发送」变成「文件夹」，手指还在按钮上松开才进入，滑出即取消。&lt;br/&gt;「取消」只停这一轮，待发还在。&lt;br/&gt;「清空」拿掉待发，不删已经收到的文件。&lt;br/&gt;服务端「启动服务」开始等人连；「在线」里对待授权先对核对码，再点允许 / 拒绝 / 拉黑。已连接可踢下线。按钮下面写着外接键盘的字母，不用长按。&lt;br/&gt;客户端「粘贴 ts://」填连接串，「连接」开始连。探测开着时，点列表里的设备会请求授权。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件&lt;/b&gt;&lt;br/&gt;短按「图片」打开相册。按住时字和颜色变成「文件」，手指还在按钮上松开才打开文件管理器，滑出即取消。选完先进待发，点「发送」才传。大于 16MB 不拷缓存。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件夹&lt;/b&gt;&lt;br/&gt;按住「发送」变成「文件夹」，手指还在按钮上松开才进入，滑出即取消。左边打勾可选多个。也可从文件管理器直接分享文件夹。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;接收&lt;/b&gt;&lt;br/&gt;文件在 下载/TextSend。图片也存文件，不进剪贴板。电脑发来的文件夹会按路径重建。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;取消和续传&lt;/b&gt;&lt;br/&gt;取消只停这一轮，待发还在。再发送会续上对面留下的半截。本地点取消「接收」会删半截。连续取消接收 3 次，冷却 10 秒。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;连不上&lt;/b&gt;&lt;br/&gt;先开飞行模式再开 Wi‑Fi，关掉网络加速/双通道。同一 Wi‑Fi，不要开 VPN。已连接时切到后台再分享，会回到当前会话。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;局域网探测与授权&lt;/b&gt;&lt;br/&gt;设置里默认关。打开后可发现同一局域网里正在开服的 TextSend。客户端点设备会请求临时授权（TSA1），两边显示同一串核对码，对得上再允许；可拒绝、拉黑、踢下线。连接和探测默认都用 54300：连接是 TCP，发现设备是 UDP。防火墙如果只放了 TCP，还要放行 UDP 54300，否则手机发过去的探测进不来。有连接时默认停止探测。不广播 PIN。</string>
     <string name="messager_cancel_btn">取消</string>
     <string name="messager_pending_title">待发 %d（点发送才传）</string>
     <string name="messager_pending_remove">从待发列表移除</string>

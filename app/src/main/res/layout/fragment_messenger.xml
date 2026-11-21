@@ -36,6 +36,7 @@
             android:layout_height="@dimen/ts_btn"
             android:layout_marginStart="6dp"
             android:layout_weight="1"
+            android:contentDescription="@string/messager_send_hint"
             android:text="@string/messager_send_btn" />
     </LinearLayout>
 

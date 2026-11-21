@@ -8,11 +8,14 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.content.res.ColorStateList
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.inputmethod.InputMethodManager
@@ -33,6 +36,8 @@ import cn.rmshadows.textsend.GalleryPickActivity
 import cn.rmshadows.textsend.KeepAlive
 import cn.rmshadows.textsend.R
 import cn.rmshadows.textsend.databinding.FragmentMessengerBinding
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.color.MaterialColors
 import cn.rmshadows.textsend.viewmodels.TextsendViewModel
 import kotlinx.coroutines.launch
 import protocol.FileIoCallback
@@ -64,6 +69,7 @@ class MessengerFragment : Fragment() {
     private var ignoreProgressUntil = 0L
     private var pendingCapListener: ViewTreeObserver.OnGlobalLayoutListener? = null
     private var leaving = false
+    private val holdArms = ArrayList<Pair<MaterialButton, Runnable>>()
 
     private val pickFiles = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         enqueueUris(uris)
@@ -233,13 +239,11 @@ class MessengerFragment : Fragment() {
         binding.buttonFile.setOnClickListener {
             openSystemGallery()
         }
-        binding.buttonFile.setOnLongClickListener {
+        bindHoldAction(binding.buttonFile, R.string.messager_file_btn, R.string.messager_file_long) {
             openFileManager()
-            true
         }
-        binding.buttonSend.setOnLongClickListener {
+        bindHoldAction(binding.buttonSend, R.string.messager_send_btn, R.string.messager_send_long) {
             pickFolderApp.launch(Intent(requireContext(), FolderPickActivity::class.java))
-            true
         }
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
@@ -260,6 +264,81 @@ class MessengerFragment : Fragment() {
                 _binding?.fileMeta?.text = "正在停止…"
             } else {
                 finishCancelUi()
+            }
+        }
+    }
+
+    private fun bindHoldAction(button: MaterialButton, shortLabel: Int, longLabel: Int, action: () -> Unit) {
+        val bg = button.backgroundTintList
+        val stroke = button.strokeColor
+        val textColor = button.textColors
+        val holdBg = ColorStateList.valueOf(
+            MaterialColors.getColor(button, com.google.android.material.R.attr.colorSecondary)
+        )
+        val holdStroke = ColorStateList.valueOf(
+            MaterialColors.getColor(button, com.google.android.material.R.attr.colorSecondary)
+        )
+        val holdText = MaterialColors.getColor(button, com.google.android.material.R.attr.colorOnSecondary)
+        val slop = ViewConfiguration.get(button.context).scaledTouchSlop
+        var tracking = false
+        var armed = false
+        val arm = Runnable {
+            if (!tracking || _binding == null) {
+                return@Runnable
+            }
+            armed = true
+            button.text = getString(longLabel)
+            button.backgroundTintList = holdBg
+            button.strokeColor = holdStroke
+            button.setTextColor(holdText)
+        }
+        fun inside(e: MotionEvent): Boolean {
+            return e.x >= -slop && e.y >= -slop &&
+                e.x < button.width + slop && e.y < button.height + slop
+        }
+        fun restore() {
+            button.removeCallbacks(arm)
+            tracking = false
+            armed = false
+            button.isPressed = false
+            button.text = getString(shortLabel)
+            button.backgroundTintList = bg
+            button.strokeColor = stroke
+            button.setTextColor(textColor)
+        }
+        holdArms.add(button to arm)
+        button.setOnTouchListener { _, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    tracking = true
+                    armed = false
+                    button.isPressed = true
+                    button.removeCallbacks(arm)
+                    button.postDelayed(arm, ViewConfiguration.getLongPressTimeout().toLong())
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (tracking && !inside(e)) {
+                        restore()
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val fireLong = tracking && armed && inside(e)
+                    val fireShort = tracking && !armed && inside(e)
+                    restore()
+                    if (fireLong) {
+                        action()
+                    } else if (fireShort) {
+                        button.performClick()
+                    }
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    restore()
+                    true
+                }
+                else -> false
             }
         }
     }
@@ -816,6 +895,10 @@ class MessengerFragment : Fragment() {
     }
 
     override fun onDestroyView() {
+        for ((button, arm) in holdArms) {
+            button.removeCallbacks(arm)
+        }
+        holdArms.clear()
         _binding?.root?.viewTreeObserver?.let { obs ->
             pendingCapListener?.let { obs.removeOnGlobalLayoutListener(it) }
         }

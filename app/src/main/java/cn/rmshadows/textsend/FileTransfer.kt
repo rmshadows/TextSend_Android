@@ -16,6 +16,7 @@ import protocol.FileIoCallback
 import protocol.FileNames
 import protocol.Protocol
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.util.UUID
 
@@ -220,12 +221,9 @@ object FileTransfer {
     }
 
     fun isFolderUri(ctx: Context, uri: Uri): Boolean {
-        if (isTreeUri(uri)) {
-            return true
-        }
         val local = guessLocalFile(ctx, uri)
-        if (local != null && local.isDirectory) {
-            return true
+        if (local != null) {
+            return local.isDirectory
         }
         val mime = try {
             ctx.contentResolver.getType(uri)
@@ -235,7 +233,30 @@ object FileTransfer {
         if (isDirMime(mime)) {
             return true
         }
-        return queryDocMime(ctx, uri)?.let { isDirMime(it) } == true
+        if (queryDocMime(ctx, uri)?.let { isDirMime(it) } == true) {
+            return true
+        }
+        if (!isTreeUri(uri)) {
+            return false
+        }
+        val doc = try {
+            if (DocumentsContract.isDocumentUri(ctx, uri)) {
+                DocumentsContract.getDocumentId(uri)
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+        if (doc.isNullOrBlank()) {
+            return true
+        }
+        val tree = try {
+            DocumentsContract.getTreeDocumentId(uri)
+        } catch (_: Exception) {
+            null
+        }
+        return tree != null && tree == doc
     }
 
     /** 文件管理器分享的目录，或 SAF 树。按相对路径入队。 */
@@ -331,6 +352,9 @@ object FileTransfer {
             return if (added > 0) name to added else null
         }
         if (uris.size == 1) {
+            if (!isFolderUri(ctx, uris[0])) {
+                return null
+            }
             val r = ingestSharedFolder(ctx, uris[0])
             return if (r.second > 0) r else null
         }
@@ -423,10 +447,10 @@ object FileTransfer {
         }
         for (uri in uris) {
             val local = guessLocalFile(ctx, uri)
-            if (local != null) {
-                var p: File? = if (local.isDirectory) local else local.parentFile
+            if (local != null && local.isFile) {
+                var p: File? = local.parentFile
                 while (p != null && !isStorageRoot(p)) {
-                    if (local.isFile && looksSmashed(local.name) && p.isDirectory) {
+                    if (looksSmashed(local.name) && p.isDirectory) {
                         return if (hint != null) walkUpToName(p, hint) ?: p else p
                     }
                     if (hint != null && p.name.equals(hint, ignoreCase = true) && p.isDirectory) {
@@ -434,9 +458,10 @@ object FileTransfer {
                     }
                     p = p.parentFile
                 }
-                if (local.isDirectory && !isStorageRoot(local)) {
-                    return local
-                }
+                continue
+            }
+            if (local != null && local.isDirectory && !isStorageRoot(local)) {
+                return local
             }
             val rel = storageRelPath(ctx, uri)
             if (!rel.isNullOrBlank()) {
@@ -556,8 +581,8 @@ object FileTransfer {
         }
         val id = try {
             when {
-                isTreeUri(uri) -> DocumentsContract.getTreeDocumentId(uri)
                 DocumentsContract.isDocumentUri(ctx, uri) -> DocumentsContract.getDocumentId(uri)
+                isTreeUri(uri) -> DocumentsContract.getTreeDocumentId(uri)
                 else -> null
             }
         } catch (_: Exception) {
@@ -979,8 +1004,8 @@ object FileTransfer {
         }
         val id = try {
             when {
-                isTreeUri(uri) -> DocumentsContract.getTreeDocumentId(uri)
                 DocumentsContract.isDocumentUri(ctx, uri) -> DocumentsContract.getDocumentId(uri)
+                isTreeUri(uri) -> DocumentsContract.getTreeDocumentId(uri)
                 else -> null
             }
         } catch (_: Exception) {
@@ -1255,7 +1280,11 @@ object FileTransfer {
         }
         return try {
             resolve(ctx, uri)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w(
+                "Textsend",
+                "share: resolve $uri ${e.javaClass.simpleName}: ${e.message}"
+            )
             null
         }
     }
@@ -1268,7 +1297,17 @@ object FileTransfer {
             size = afdSize(cr, uri)
         }
         name = FileNames.sanitize(ensureExt(cr, uri, name))
-        val dest = if (size < 0 || size > CACHE_COPY_MAX) {
+        val local = guessLocalFile(ctx, uri)?.takeIf { it.isFile && it.length() > 0 }
+        if (local != null && (name.isBlank() || name.equals("file", true))) {
+            name = FileNames.sanitize(local.name)
+        }
+        if (size < 0 && local != null && canReadFile(local)) {
+            size = local.length()
+        }
+        if (local != null && size > CACHE_COPY_MAX && size <= Protocol.FILE_SIZE_MAX && canReadFile(local)) {
+            return Item(UUID.randomUUID().toString(), name, size, Uri.fromFile(local), null)
+        }
+        val dest = if (size > CACHE_COPY_MAX) {
             null
         } else {
             copyToCache(ctx, uri, name)
@@ -1510,11 +1549,45 @@ object FileTransfer {
                 if (dest.length() > 0) {
                     return dest
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                android.util.Log.w(
+                    "Textsend",
+                    "share: copy $src ${e.javaClass.simpleName}: ${e.message}"
+                )
             }
             dest.delete()
         }
+        val local = guessLocalFile(ctx, uri)?.takeIf { it.isFile && it.length() > 0 }
+        if (local != null && local.length() <= CACHE_COPY_MAX && copyFileTo(local, dest)) {
+            return dest
+        }
+        dest.delete()
         return null
+    }
+
+    private fun copyFileTo(local: File, dest: File): Boolean {
+        return try {
+            FileInputStream(local).use { inn ->
+                FileOutputStream(dest).use { out -> inn.copyTo(out) }
+            }
+            dest.length() > 0
+        } catch (e: Exception) {
+            android.util.Log.w(
+                "Textsend",
+                "share: copy file ${local.absolutePath} ${e.javaClass.simpleName}: ${e.message}"
+            )
+            dest.delete()
+            false
+        }
+    }
+
+    private fun canReadFile(local: File): Boolean {
+        return try {
+            FileInputStream(local).use { it.read() }
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     /**
