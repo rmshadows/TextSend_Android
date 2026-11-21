@@ -3,18 +3,27 @@ package cn.rmshadows.textsend.fragments
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.GradientDrawable
+import android.net.Uri
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.LayoutInflater
+import android.text.InputType
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.widget.ArrayAdapter
+import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -32,6 +41,7 @@ import cn.rmshadows.textsend.ButtonFeel
 import cn.rmshadows.textsend.LanAuthGate
 import cn.rmshadows.textsend.LanDiscover
 import cn.rmshadows.textsend.R
+import cn.rmshadows.textsend.WebHost
 import cn.rmshadows.textsend.databinding.FragmentServerBinding
 import cn.rmshadows.textsend.viewmodels.ServerFragmentViewModel
 import cn.rmshadows.textsend.viewmodels.TextsendViewModel
@@ -62,7 +72,8 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
     private class SessionTarget(
         val pending: Boolean,
         val host: String,
-        val card: LinearLayout
+        val card: LinearLayout,
+        val webIndex: Int = -1
     )
 
     // This property is only valid between onCreateView and
@@ -136,10 +147,10 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                     // 更新切换按钮
                     if (it.serverRunning) {
                         binding.serverStartBtn.setText(R.string.server_stop_btn)
-                        // 运行的时候只会显示连接数量
-                        val connected: String =
-                            "前往消息界面/" + it.clientCount.toString()
-                        binding.multiClientBtn.text = connected
+                        binding.multiClientBtn.text = "前往消息界面/" + it.clientCount.toString()
+                    } else if (WebHost.isRunning()) {
+                        binding.serverStartBtn.setText(R.string.server_start_btn)
+                        binding.multiClientBtn.text = "前往消息界面/网页"
                     } else {
                         binding.serverStartBtn.setText(R.string.server_start_btn)
                         // 不在运行才会显示切换模式
@@ -226,16 +237,8 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
 
         // 用户模式切换
         binding.multiClientBtn.setOnClickListener {
-            if (viewModel.uiState.value.serverRunning) {
-                if (viewModel.uiState.value.clientCount == 0) {
-                    Toast.makeText(
-                        context,
-                        "当前似乎没有用户连接！",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                } else {
-                    findNavController().navigate(R.id.action_ServerFragment_to_messengerFragment)
-                }
+            if (viewModel.uiState.value.serverRunning || WebHost.isRunning()) {
+                findNavController().navigate(R.id.action_ServerFragment_to_messengerFragment)
             } else {
                 if (viewModel.uiState.value.maxConnection == 1) {
                     // 多用户模式最多支持7人
@@ -248,6 +251,8 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                 }
             }
         }
+
+        binding.webBridgeBtn.setOnClickListener { showWebDialog() }
 
         binding.serverStartBtn.setOnClickListener {
             if (viewModel.uiState.value.serverRunning) {
@@ -305,17 +310,31 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         binding.aliveClientsBox.visibility = View.GONE
         val pending = if (serverRunning) LanAuthGate.snap.value.pending else emptyList()
         val alive = if (serverRunning) TsServer.listAliveClientsCurrent() else emptyList()
+        val web = if (WebHost.isRunning()) WebHost.listenerHosts() else emptyList()
+        val online = alive.size + web.size
         binding.sessionButton.text = when {
-            !serverRunning -> getString(R.string.server_session_idle)
-            pending.isNotEmpty() -> getString(R.string.server_session_pending, pending.size, alive.size)
-            else -> getString(R.string.server_session_online, alive.size)
+            !serverRunning && web.isEmpty() -> getString(R.string.server_session_idle)
+            pending.isNotEmpty() -> getString(R.string.server_session_pending, pending.size, online)
+            else -> getString(R.string.server_session_online, online)
         }
-        if (!serverRunning) {
+        if (!serverRunning && web.isEmpty()) {
             dismissSessionDialog()
             return
         }
         if (sessionDialog?.isShowing == true) {
-            fillSessionList(pending, alive)
+            fillSessionList(pending, alive, web)
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        WebHost.onChanged = {
+            if (_binding != null) {
+                updateSessionButton(viewModel.uiState.value.serverRunning)
+                if (!viewModel.uiState.value.serverRunning && WebHost.isRunning()) {
+                    binding.multiClientBtn.text = "前往消息界面/网页"
+                }
+            }
         }
     }
 
@@ -323,7 +342,7 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         if (!isAdded || _binding == null) {
             return
         }
-        if (!viewModel.uiState.value.serverRunning) {
+        if (!viewModel.uiState.value.serverRunning && !WebHost.isRunning()) {
             Toast.makeText(context, R.string.server_session_need_start, Toast.LENGTH_SHORT).show()
             return
         }
@@ -352,7 +371,12 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         val scroll = ScrollView(requireContext()).apply {
             addView(root)
         }
-        fillSessionList(LanAuthGate.snap.value.pending, TsServer.listAliveClientsCurrent())
+        val running = viewModel.uiState.value.serverRunning
+        fillSessionList(
+            if (running) LanAuthGate.snap.value.pending else emptyList(),
+            if (running) TsServer.listAliveClientsCurrent() else emptyList(),
+            if (WebHost.isRunning()) WebHost.listenerHosts() else emptyList()
+        )
         val dialog = AlertDialog.Builder(requireContext())
             .setTitle(R.string.server_session_title)
             .setView(scroll)
@@ -395,12 +419,14 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
 
     private fun fillSessionList(
         pending: List<LanAuthGate.PendingItem>,
-        alive: List<TsServer.AliveClient>
+        alive: List<TsServer.AliveClient>,
+        web: List<String>
     ) {
         val box = sessionList ?: return
         val max = viewModel.uiState.value.maxConnection.toInt().coerceAtLeast(1)
         val sig = pending.joinToString("|") { "${it.host}\u0000${it.name}\u0000${it.at}\u0000${it.sas}" } +
-            "#" + alive.joinToString("|") { "${it.host}\u0000${it.port}\u0000${it.name}" } + "|$max"
+            "#" + alive.joinToString("|") { "${it.host}\u0000${it.port}\u0000${it.name}" } +
+            "#" + web.joinToString("|") + "|$max"
         if (sig == sessionSig && box.childCount > 0) {
             return
         }
@@ -426,15 +452,16 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                 box.addView(denyAll)
             }
         }
-        val aliveTitle = if (max > 1) {
-            getString(R.string.server_alive_clients_title) + "  ${alive.size} / $max"
+        val online = alive.size + web.size
+        val aliveTitle = if (max > 1 && web.isEmpty()) {
+            getString(R.string.server_alive_clients_title) + "  $online / $max"
         } else {
-            getString(R.string.server_alive_clients_title) + "  ${alive.size}"
+            getString(R.string.server_alive_clients_title) + "  $online"
         }
         box.addView(sectionTitle(aliveTitle).apply {
             (layoutParams as LinearLayout.LayoutParams).topMargin = (12 * density).toInt()
         })
-        if (alive.isEmpty()) {
+        if (alive.isEmpty() && web.isEmpty()) {
             box.addView(mutedLine(getString(R.string.server_session_no_clients)))
         } else {
             for (c in alive) {
@@ -442,11 +469,17 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                 built.add(SessionTarget(false, c.host, card))
                 box.addView(card)
             }
-            if (alive.size > 1) {
+            web.forEachIndexed { index, host ->
+                val card = buildWebRow(index, host)
+                built.add(SessionTarget(false, host, card, index))
+                box.addView(card)
+            }
+            if (alive.size + web.size > 1) {
                 val kickAll = reviewButton(getString(R.string.server_kick_all), true) {
                     for (c in TsServer.listAliveClientsCurrent()) {
                         TsServer.kickHostCurrent(c.host)
                     }
+                    WebHost.dropAllListeners()
                     sessionSig = ""
                     updateSessionButton(true)
                 }
@@ -518,6 +551,21 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         )
     }
 
+    private fun buildWebRow(index: Int, host: String): LinearLayout {
+        return deviceCard(
+            "网页 ${WebHost.currentWay()}",
+            host,
+            null,
+            listOf(
+                reviewButton(getString(R.string.server_kick), false, "K") {
+                    WebHost.dropListener(index, host)
+                    sessionSig = ""
+                    updateSessionButton(true)
+                }
+            )
+        )
+    }
+
     private fun buildAliveRow(client: TsServer.AliveClient): LinearLayout {
         val title = client.name.ifBlank { client.host }
         val host = if (client.name.isBlank()) "" else client.host
@@ -575,7 +623,11 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                 LanAuthGate.decide(target.host, if (action == "allow") "allow" else "deny")
             }
             "block" -> {
-                if (target.pending) {
+                if (target.webIndex >= 0) {
+                    WebHost.dropListener(target.webIndex, target.host)
+                    sessionSig = ""
+                    updateSessionButton(true)
+                } else if (target.pending) {
                     LanAuthGate.decide(target.host, "blacklist")
                 } else {
                     LanAuthGate.addBlacklist(target.host)
@@ -589,7 +641,11 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                     Toast.makeText(context, R.string.server_key_kick_pending, Toast.LENGTH_SHORT).show()
                     return
                 }
-                TsServer.kickHostCurrent(target.host)
+                if (target.webIndex >= 0) {
+                    WebHost.dropListener(target.webIndex, target.host)
+                } else {
+                    TsServer.kickHostCurrent(target.host)
+                }
                 sessionSig = ""
                 updateSessionButton(true)
             }
@@ -757,6 +813,241 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
     /**
      * 生成二维码
      */
+    private var webWay = 'B'
+
+    private fun showWebDialog() {
+        val ctx = context ?: return
+        val density = resources.displayMetrics.density
+        val pad = (12 * density).toInt()
+        val gap = (6 * density).toInt()
+        val btnH = resources.getDimensionPixelSize(R.dimen.ts_btn)
+        val primary = themeColor(com.google.android.material.R.attr.colorPrimary)
+        val onPrimary = themeColor(com.google.android.material.R.attr.colorOnPrimary)
+        val secondary = themeColor(com.google.android.material.R.attr.colorSecondary)
+        val onSecondary = themeColor(com.google.android.material.R.attr.colorOnSecondary)
+        if (WebHost.isRunning()) {
+            webWay = WebHost.currentWay()
+        }
+        val box = LinearLayout(ctx)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(pad, pad, pad, pad)
+        val ways = LinearLayout(ctx)
+        ways.orientation = LinearLayout.HORIZONTAL
+        val wayA = MaterialButton(ctx)
+        val wayB = MaterialButton(ctx)
+        val wayC = MaterialButton(ctx)
+        val hint = TextView(ctx)
+        val port = EditText(ctx)
+        port.inputType = InputType.TYPE_CLASS_NUMBER
+        port.setText(if (WebHost.isRunning()) WebHost.port().toString() else WebHost.DEFAULT_PORT.toString())
+        val state = TextView(ctx)
+        val linkBtn = MaterialButton(ctx)
+        val qr = ImageView(ctx)
+        val qrSize = (196 * density).toInt()
+        qr.layoutParams = LinearLayout.LayoutParams(qrSize, qrSize).apply {
+            gravity = android.view.Gravity.CENTER_HORIZONTAL
+            topMargin = gap
+        }
+        fun paintWay(button: MaterialButton, on: Boolean) {
+            button.cornerRadius = (10 * density).toInt()
+            button.insetTop = 0
+            button.insetBottom = 0
+            if (on) {
+                button.backgroundTintList = ColorStateList.valueOf(primary)
+                button.setTextColor(onPrimary)
+                button.strokeWidth = 0
+            } else {
+                button.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+                button.setTextColor(primary)
+                button.strokeWidth = (1.5f * density).toInt().coerceAtLeast(2)
+                button.strokeColor = ColorStateList.valueOf(primary)
+            }
+        }
+        fun paintWays() {
+            paintWay(wayA, webWay == 'A')
+            paintWay(wayB, webWay == 'B')
+            paintWay(wayC, webWay == 'C')
+            hint.text = when (webWay) {
+                'A' -> "明文，靠扫码令牌。不要传密码。"
+                'C' -> "HTTPS。这一档还没接到手机。"
+                else -> "正文加密。三档同时只开一个。"
+            }
+        }
+        fun chip(view: MaterialButton, label: String, mark: Char) {
+            view.text = label
+            view.isAllCaps = false
+            view.minHeight = btnH
+            view.minimumHeight = btnH
+            view.layoutParams = LinearLayout.LayoutParams(0, btnH, 1f).apply {
+                marginStart = gap / 2
+                marginEnd = gap / 2
+            }
+            view.setOnClickListener {
+                webWay = mark
+                paintWays()
+            }
+            ways.addView(view)
+        }
+        chip(wayA, "A 明文", 'A')
+        chip(wayB, "B 加密", 'B')
+        chip(wayC, "C 证书", 'C')
+        paintWays()
+        hint.setPadding(0, pad, 0, pad)
+        state.setPadding(0, gap, 0, 0)
+        fun currentUrl(): String? {
+            if (!WebHost.isRunning()) {
+                return null
+            }
+            return WebHost.pageUrl(viewModel.uiState.value.preferIpAddr)
+        }
+        fun refresh() {
+            val url = currentUrl()
+            if (url != null) {
+                state.text = "网页 ${WebHost.currentWay()}  0.0.0.0:${WebHost.port()}  ·  浏览器 ${WebHost.listenerCount()}"
+                qr.setImageBitmap(generateQRCode(url))
+                linkBtn.isEnabled = true
+            } else {
+                state.text = "未启动。ts:// 不受影响。"
+                qr.setImageDrawable(ResourcesCompat.getDrawable(resources, R.mipmap.ic_textsend, null))
+                linkBtn.isEnabled = true
+            }
+        }
+        val power = MaterialButton(ctx)
+        power.text = if (WebHost.isRunning()) "停止" else "启动"
+        power.isAllCaps = false
+        power.cornerRadius = (10 * density).toInt()
+        power.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, btnH
+        ).apply { topMargin = gap }
+        power.setOnClickListener {
+            if (WebHost.isRunning()) {
+                WebHost.stop()
+                power.text = "启动"
+                refresh()
+                return@setOnClickListener
+            }
+            val p = port.text.toString().toIntOrNull() ?: WebHost.DEFAULT_PORT
+            val err = WebHost.start(ctx, p, webWay)
+            if (err != null) {
+                Toast.makeText(ctx, err, Toast.LENGTH_LONG).show()
+            } else {
+                power.text = "停止"
+            }
+            refresh()
+        }
+        linkBtn.text = "复制链接"
+        linkBtn.isAllCaps = false
+        linkBtn.cornerRadius = (10 * density).toInt()
+        linkBtn.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, btnH
+        ).apply { topMargin = gap }
+        val linkHint = TextView(ctx)
+        linkHint.text = "短按复制。按住后变成「浏览器」，手指还在按钮上松开才打开，滑出取消。"
+        linkHint.setPadding(0, gap, 0, 0)
+        val normalBg = ColorStateList.valueOf(Color.TRANSPARENT)
+        val normalText = primary
+        linkBtn.backgroundTintList = normalBg
+        linkBtn.setTextColor(normalText)
+        linkBtn.strokeWidth = (1.5f * density).toInt().coerceAtLeast(2)
+        linkBtn.strokeColor = ColorStateList.valueOf(primary)
+        val slop = ViewConfiguration.get(ctx).scaledTouchSlop
+        var tracking = false
+        var armed = false
+        val arm = Runnable {
+            if (!tracking) {
+                return@Runnable
+            }
+            armed = true
+            linkBtn.text = "浏览器"
+            linkBtn.backgroundTintList = ColorStateList.valueOf(secondary)
+            linkBtn.setTextColor(onSecondary)
+            linkBtn.strokeWidth = 0
+        }
+        fun inside(e: MotionEvent): Boolean {
+            return e.x >= -slop && e.y >= -slop &&
+                e.x < linkBtn.width + slop && e.y < linkBtn.height + slop
+        }
+        fun restoreLink() {
+            linkBtn.removeCallbacks(arm)
+            tracking = false
+            armed = false
+            linkBtn.isPressed = false
+            linkBtn.text = "复制链接"
+            linkBtn.backgroundTintList = normalBg
+            linkBtn.setTextColor(normalText)
+            linkBtn.strokeWidth = (1.5f * density).toInt().coerceAtLeast(2)
+            linkBtn.strokeColor = ColorStateList.valueOf(primary)
+        }
+        fun copyOrNeedStart() {
+            val url = currentUrl()
+            if (url == null) {
+                Toast.makeText(ctx, "先启动，再复制链接", Toast.LENGTH_SHORT).show()
+                return
+            }
+            val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("textsend", url))
+            Toast.makeText(ctx, "已复制链接", Toast.LENGTH_SHORT).show()
+        }
+        fun openOrNeedStart() {
+            val url = currentUrl()
+            if (url == null) {
+                Toast.makeText(ctx, "先启动，再打开链接", Toast.LENGTH_SHORT).show()
+                return
+            }
+            try {
+                ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+            } catch (_: Exception) {
+                Toast.makeText(ctx, "打不开浏览器", Toast.LENGTH_SHORT).show()
+            }
+        }
+        linkBtn.setOnTouchListener { _, e ->
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    tracking = true
+                    armed = false
+                    linkBtn.isPressed = true
+                    linkBtn.removeCallbacks(arm)
+                    linkBtn.postDelayed(arm, ViewConfiguration.getLongPressTimeout().toLong())
+                    true
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    if (tracking && !inside(e)) {
+                        restoreLink()
+                    }
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    val fireLong = tracking && armed && inside(e)
+                    val fireShort = tracking && !armed && inside(e)
+                    restoreLink()
+                    if (fireLong) {
+                        openOrNeedStart()
+                    } else if (fireShort) {
+                        copyOrNeedStart()
+                    }
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    restoreLink()
+                    true
+                }
+                else -> false
+            }
+        }
+        box.addView(ways)
+        box.addView(hint)
+        box.addView(port)
+        box.addView(power)
+        box.addView(state)
+        box.addView(linkBtn)
+        box.addView(linkHint)
+        box.addView(qr)
+        refresh()
+        val dialog = AlertDialog.Builder(ctx).setTitle("兼容模式").setView(box).setPositiveButton("关闭", null).create()
+        dialog.setOnDismissListener { linkBtn.removeCallbacks(arm) }
+        dialog.show()
+    }
+
     private fun generateQRCode(content: String): Bitmap {
         var logo: Bitmap? = null
         val drawable = ResourcesCompat.getDrawable(resources, R.mipmap.ic_textsend, null)

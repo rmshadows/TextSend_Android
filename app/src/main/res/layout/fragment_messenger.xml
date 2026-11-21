@@ -10,14 +10,28 @@
     android:paddingEnd="@dimen/ts_page_pad"
     android:paddingBottom="8dp">
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/sessionButton"
+        style="@style/Widget.Textsend.Button.Outlined"
+        android:layout_width="0dp"
+        android:layout_height="@dimen/ts_btn"
+        android:text="@string/server_session_idle"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        tools:visibility="visible" />
+
     <LinearLayout
         android:id="@+id/rowButtons"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
         android:orientation="horizontal"
+        app:layout_constraintBottom_toTopOf="@+id/textView"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
+        app:layout_constraintTop_toBottomOf="@+id/fileBar">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/buttonFile"
@@ -50,15 +64,17 @@
         android:ems="10"
         android:gravity="start|top"
         android:hint="@string/messager_edittext_hint"
+        android:imeOptions="flagNoFullscreen"
         android:inputType="textMultiLine"
         android:minLines="3"
         android:padding="10dp"
+        android:scrollbars="vertical"
         android:textAppearance="?attr/textAppearanceBodyMedium"
         app:layout_constraintBottom_toTopOf="@+id/pendingBox"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHeight_min="88dp"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/rowButtons"
+        app:layout_constraintTop_toBottomOf="@+id/sessionButton"
         tools:ignore="SpeakableTextPresentCheck" />
 
     <LinearLayout
@@ -128,7 +144,7 @@
         android:paddingEnd="12dp"
         android:paddingBottom="4dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@+id/textView"
+        app:layout_constraintBottom_toTopOf="@+id/rowButtons"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/pendingBox"
@@ -188,6 +204,6 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/fileBar" />
+        app:layout_constraintTop_toBottomOf="@+id/rowButtons" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

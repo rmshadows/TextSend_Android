@@ -113,6 +113,7 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:documentLaunchMode="none"
+            android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Textsend">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

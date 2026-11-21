@@ -148,6 +148,14 @@
             android:layout_marginTop="6dp"
             android:text="@string/server_start_btn" />
 
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/webBridgeBtn"
+            style="@style/Widget.Textsend.Button.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/ts_btn"
+            android:layout_marginTop="6dp"
+            android:text="@string/server_web_btn" />
+
         <TextView
             android:id="@+id/serverTextView"
             android:layout_width="match_parent"

@@ -19,7 +19,11 @@ import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.view.inputmethod.InputMethodManager
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.activity.OnBackPressedCallback
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.activity.result.contract.ActivityResultContracts
@@ -31,6 +35,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import cn.rmshadows.textsend.FileTransfer
+import cn.rmshadows.textsend.LanAuthGate
+import cn.rmshadows.textsend.WebHost
 import cn.rmshadows.textsend.FolderPickActivity
 import cn.rmshadows.textsend.GalleryPickActivity
 import cn.rmshadows.textsend.KeepAlive
@@ -51,6 +57,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 class MessengerFragment : Fragment() {
     private var _binding: FragmentMessengerBinding? = null
+    private var peopleDialog: AlertDialog? = null
+    private var peopleBox: LinearLayout? = null
     private val binding get() = _binding!!
     private val tsviewModel: TextsendViewModel by activityViewModels()
     private var lastClipData: String = ""
@@ -158,6 +166,7 @@ class MessengerFragment : Fragment() {
                         lastClipData = it.messageContent
                         copyToClickboard(it.messageContent)
                     }
+                    refreshPeopleButton()
                     if (!it.isServerMode && !it.isClientConnected && TsClient.peer?.isAlive != true) {
                         if (findNavController().currentDestination?.id == R.id.messengerFragment) {
                             Log.d(Constant.TAG, "onCreateView: 消息界面主动返回")
@@ -193,6 +202,9 @@ class MessengerFragment : Fragment() {
             Toast.makeText(context, "已清空待发列表", Toast.LENGTH_SHORT).show()
         }
 
+        binding.sessionButton.setOnClickListener { showPeople() }
+        refreshPeopleButton()
+
         binding.buttonSend.setOnClickListener {
             if (FileTransfer.pendingCount() > 0) {
                 if (fileLoopRunning) {
@@ -212,14 +224,22 @@ class MessengerFragment : Fragment() {
                 try {
                     if (serverMode) {
                         val n = TsServer.sendToAllCurrent(text)
-                        if (n < 0) {
-                            uiSendDone(false, text, "服务未运行")
+                        if (n > 0) {
+                            uiSendDone(true, text, null)
                             return@Thread
                         }
-                        if (n == 0) {
-                            uiSendDone(false, text, "没有已连接的客户端")
+                        val web = if (WebHost.hasSession()) WebHost.pushText(text) else 0
+                        if (web == 1) {
+                            uiSendDone(true, text, null)
                             return@Thread
                         }
+                        val fail = when {
+                            web == -1 -> "文字超过 64KB"
+                            n < 0 && !WebHost.isRunning() -> "服务未运行"
+                            else -> "没有已连接的客户端"
+                        }
+                        uiSendDone(false, text, fail)
+                        return@Thread
                     } else {
                         val peer = TsClient.peer
                         if (peer == null || !peer.isAlive) {
@@ -676,14 +696,27 @@ class MessengerFragment : Fragment() {
             val n = TsServer.sendFileToAllCurrent(
                 item.name, item.size, opener, cancelled, item.treeName, item.relPath, seq, of
             )
-            if (n < 0) {
+            if (n > 0) {
+                if (n > 1) {
+                    uiToast("已发给 $n 端：${item.name}")
+                }
+            } else if (WebHost.hasSession()) {
+                val web = WebHost.pushFile(item.name, item.size, item.treeName, item.relPath) {
+                    opener.open()
+                }
+                when (web) {
+                    1 -> {
+                        uiProgress(false, item.name, item.size, item.size, seq, of)
+                        return
+                    }
+                    -1 -> throw java.io.IOException("文件超过 20GB")
+                    -2 -> throw java.io.IOException("网页待收已满")
+                    else -> throw java.io.IOException("没有已连接的客户端")
+                }
+            } else if (n < 0) {
                 throw java.io.IOException("服务未运行")
-            }
-            if (n == 0) {
+            } else {
                 throw java.io.IOException("没有已连接的客户端")
-            }
-            if (n > 1) {
-                uiToast("已发给 $n 端：${item.name}")
             }
         } else {
             val peer = TsClient.peer
@@ -894,7 +927,159 @@ class MessengerFragment : Fragment() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        if (tsviewModel.uiState.value.isServerMode) {
+            WebHost.onChanged = {
+                if (_binding != null) {
+                    refreshPeopleButton()
+                    if (peopleDialog?.isShowing == true) {
+                        fillPeople()
+                    }
+                }
+            }
+        }
+        refreshPeopleButton()
+    }
+
+    private fun refreshPeopleButton() {
+        val b = _binding ?: return
+        val server = tsviewModel.uiState.value.isServerMode
+        b.sessionButton.visibility = if (server) View.VISIBLE else View.GONE
+        if (!server) {
+            peopleDialog?.dismiss()
+            return
+        }
+        val running = TsServer.isRunningCurrent()
+        val pending = if (running) LanAuthGate.snap.value.pending.size else 0
+        val alive = if (running) TsServer.listAliveClientsCurrent().size else 0
+        val web = if (WebHost.isRunning()) WebHost.listenerCount() else 0
+        val online = alive + web
+        b.sessionButton.text = when {
+            !running && web == 0 -> getString(R.string.server_session_idle)
+            pending > 0 -> getString(R.string.server_session_pending, pending, online)
+            else -> getString(R.string.server_session_online, online)
+        }
+    }
+
+    private fun showPeople() {
+        if (!isAdded || _binding == null) {
+            return
+        }
+        if (!TsServer.isRunningCurrent() && !WebHost.isRunning()) {
+            Toast.makeText(context, R.string.server_session_need_start, Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (peopleDialog?.isShowing == true) {
+            fillPeople()
+            return
+        }
+        val box = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            val pad = (12 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad, pad, pad)
+        }
+        peopleBox = box
+        fillPeople()
+        val scroll = ScrollView(requireContext()).apply { addView(box) }
+        peopleDialog = AlertDialog.Builder(requireContext())
+            .setTitle(R.string.server_session_title)
+            .setView(scroll)
+            .setPositiveButton(R.string.server_session_close, null)
+            .setOnDismissListener {
+                peopleDialog = null
+                peopleBox = null
+            }
+            .create()
+        peopleDialog?.show()
+    }
+
+    private fun fillPeople() {
+        val box = peopleBox ?: return
+        box.removeAllViews()
+        val running = TsServer.isRunningCurrent()
+        val pending = if (running) LanAuthGate.snap.value.pending else emptyList()
+        val alive = if (running) TsServer.listAliveClientsCurrent() else emptyList()
+        val web = if (WebHost.isRunning()) WebHost.listenerHosts() else emptyList()
+        box.addView(peopleTitle(getString(R.string.server_auth_pending_title) + "  ${pending.size}"))
+        if (pending.isEmpty()) {
+            box.addView(peopleLine(getString(R.string.server_session_no_pending)))
+        } else {
+            for (item in pending) {
+                val row = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
+                row.addView(peopleButton(getString(R.string.server_auth_allow)) {
+                    LanAuthGate.decide(item.host, "allow")
+                })
+                row.addView(peopleButton(getString(R.string.server_auth_deny)) {
+                    LanAuthGate.decide(item.host, "deny")
+                })
+                row.addView(peopleButton(getString(R.string.server_auth_blacklist)) {
+                    LanAuthGate.decide(item.host, "blacklist")
+                })
+                box.addView(peopleLine(item.name.ifBlank { item.host }))
+                box.addView(row)
+            }
+        }
+        box.addView(peopleTitle(getString(R.string.server_alive_clients_title) + "  ${alive.size + web.size}"))
+        if (alive.isEmpty() && web.isEmpty()) {
+            box.addView(peopleLine(getString(R.string.server_session_no_clients)))
+        }
+        for (c in alive) {
+            box.addView(peopleLine(c.name.ifBlank { c.host }))
+            box.addView(peopleButton(getString(R.string.server_kick), fill = true) {
+                TsServer.kickHostCurrent(c.host)
+                refreshPeopleButton()
+                fillPeople()
+            })
+        }
+        web.forEachIndexed { index, host ->
+            box.addView(peopleLine("网页 ${WebHost.currentWay()}  ·  $host"))
+            box.addView(peopleButton(getString(R.string.server_kick), fill = true) {
+                WebHost.dropListener(index, host)
+                refreshPeopleButton()
+                fillPeople()
+            })
+        }
+    }
+
+    private fun peopleTitle(text: String): TextView {
+        return TextView(requireContext()).apply {
+            this.text = text
+            setPadding(0, (10 * resources.displayMetrics.density).toInt(), 0, 0)
+        }
+    }
+
+    private fun peopleLine(text: String): TextView {
+        return TextView(requireContext()).apply {
+            this.text = text
+            setPadding(0, (6 * resources.displayMetrics.density).toInt(), 0, 0)
+        }
+    }
+
+    private fun peopleButton(label: String, fill: Boolean = false, onClick: () -> Unit): MaterialButton {
+        val height = (40 * resources.displayMetrics.density).toInt()
+        return MaterialButton(
+            requireContext(),
+            null,
+            com.google.android.material.R.attr.materialButtonOutlinedStyle
+        ).apply {
+            text = label
+            isAllCaps = false
+            cornerRadius = 0
+            minHeight = height
+            layoutParams = if (fill) {
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, height)
+            } else {
+                LinearLayout.LayoutParams(0, height, 1f)
+            }
+            setOnClickListener { onClick() }
+        }
+    }
+
     override fun onDestroyView() {
+        peopleDialog?.dismiss()
+        peopleDialog = null
+        peopleBox = null
         for ((button, arm) in holdArms) {
             button.removeCallbacks(arm)
         }

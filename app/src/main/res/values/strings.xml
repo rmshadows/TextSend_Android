@@ -50,6 +50,7 @@
     <string name="server_switch_btn_one">切换单用户模式</string>
     <string name="server_switch_btn_multi">切换多用户模式</string>
     <string name="server_start_btn">启动服务</string>
+    <string name="server_web_btn">兼容模式</string>
     <string name="server_stop_btn">停止服务</string>
     <string name="server_content_description">二维码图片</string>
     <string name="server_copy_hint">已自动复制长连接串。点 PIN 复制短连接串，长按只复制数字。</string>
