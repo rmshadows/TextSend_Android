@@ -415,7 +415,7 @@ object WebHost {
             writeText(out, 500, "missing page")
             return
         }
-        writeBytes(out, 200, "OK", type, if (method == "HEAD") null else bytes, headOnly = method == "HEAD", length = bytes.size)
+        writeBytes(out, 200, "OK", type, if (method == "HEAD") null else bytes, headOnly = method == "HEAD", length = bytes.size, cache = "no-cache")
     }
 
     private fun meta(out: OutputStream, method: String, query: Map<String, String>, headers: Map<String, String>) {
@@ -749,14 +749,15 @@ object WebHost {
         type: String?,
         body: ByteArray?,
         headOnly: Boolean = false,
-        length: Int = body?.size ?: 0
+        length: Int = body?.size ?: 0,
+        cache: String = "no-store"
     ) {
         val sb = StringBuilder()
         sb.append("HTTP/1.1 ").append(code).append(' ').append(reason).append("\r\n")
         if (type != null) {
             sb.append("Content-Type: ").append(type).append("\r\n")
         }
-        sb.append("Cache-Control: no-store\r\n")
+        sb.append("Cache-Control: ").append(cache).append("\r\n")
         sb.append("X-Content-Type-Options: nosniff\r\n")
         sb.append("Content-Length: ").append(length).append("\r\n")
         sb.append("Connection: close\r\n\r\n")
