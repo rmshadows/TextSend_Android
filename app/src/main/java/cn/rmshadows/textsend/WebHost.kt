@@ -3,6 +3,7 @@ package cn.rmshadows.textsend
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.media.MediaScannerConnection
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
@@ -11,6 +12,7 @@ import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import protocol.AesGcm
 import protocol.B64
+import protocol.FileNames
 import protocol.Hkdf
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -24,6 +26,7 @@ import java.net.ServerSocket
 import java.net.Socket
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
 import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.concurrent.CopyOnWriteArrayList
@@ -31,11 +34,12 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.net.ssl.SSLServerSocket
 
 /**
- * 手机当服务端时的网页桥。A 明文、B 加密，共用 54301，同时只开一档。
- * 不走 ts://。C 证书还没接。浏览器上传到手机的文件还没接。
- * 手机发给浏览器的文字和文件走这里。
+ * 手机当服务端时的网页桥。A 明文、B 加密、C 证书，共用 54301，同时只开一档。
+ * 不走 ts://。C 是 HTTPS，正文仍和 B 同一套 AES-GCM。
+ * 手机发给浏览器的文字和文件走这里，浏览器上传到手机的文件也走这里。
  */
 object WebHost {
     const val DEFAULT_PORT = 54301
@@ -75,6 +79,7 @@ object WebHost {
     @Volatile private var token: String? = null
     private var ikm: ByteArray? = null
     private var aesKey: ByteArray? = null
+    private var caPem: ByteArray? = null
     @Volatile private var touched = 0L
 
     fun isRunning(): Boolean = running.get() && server?.isClosed == false
@@ -179,18 +184,17 @@ object WebHost {
         if (port !in 1..65535) {
             return "端口不对"
         }
-        if (nextWay != 'A' && nextWay != 'B') {
+        if (nextWay != 'A' && nextWay != 'B' && nextWay != 'C') {
             return "这一档还没接上"
         }
         stop()
         val ctx = context.applicationContext
         app = ctx
+        WebInbox.attach(ctx)
         way = nextWay
         mint()
         return try {
-            val ss = ServerSocket()
-            ss.reuseAddress = true
-            ss.bind(InetSocketAddress(port), 16)
+            val ss = openServer(ctx, port, nextWay)
             server = ss
             boundPort = ss.localPort
             running.set(true)
@@ -220,6 +224,36 @@ object WebHost {
         }
     }
 
+    /** 根证书文件路径。C 档才有。 */
+    fun caCertFile(): java.io.File? {
+        if (way != 'C' || !isRunning()) {
+            return null
+        }
+        val ctx = app ?: return null
+        return try {
+            LanCert.caCertificate(ctx).toFile()
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun openServer(ctx: Context, port: Int, nextWay: Char): ServerSocket {
+        if (nextWay != 'C') {
+            caPem = null
+            val ss = ServerSocket()
+            ss.reuseAddress = true
+            ss.bind(InetSocketAddress(port), 16)
+            return ss
+        }
+        val material = LanCert.material(ctx)
+        caPem = Files.readAllBytes(material.caCert)
+        val factory = material.context.serverSocketFactory
+        val ss = factory.createServerSocket() as SSLServerSocket
+        ss.reuseAddress = true
+        ss.bind(InetSocketAddress(port), 16)
+        return ss
+    }
+
     fun stop() {
         running.set(false)
         dropClients("stopped")
@@ -239,7 +273,9 @@ object WebHost {
             ikm = null
             outbound.clear()
             outbox.clear()
+            caPem = null
         }
+        WebInbox.release()
         notifyChanged()
     }
 
@@ -258,7 +294,8 @@ object WebHost {
         if (h.indexOf(':') >= 0 && !h.startsWith("[")) {
             h = "[$h]"
         }
-        val base = "http://$h:$boundPort/?s=$id"
+        val scheme = if (way == 'C') "https" else "http"
+        val base = "$scheme://$h:$boundPort/?s=$id"
         return if (way == 'A') {
             val t = token ?: return null
             "$base&t=$t&m=A"
@@ -306,6 +343,7 @@ object WebHost {
                 outbound.clear()
                 outbox.clear()
             }
+            WebInbox.release()
             dropClients("expired")
             notifyChanged()
             return
@@ -356,7 +394,15 @@ object WebHost {
                 }
             }
             val len = headers["content-length"]?.toIntOrNull() ?: 0
-            if (len < 0 || len > MAX_SEALED) {
+            val cap = when (path) {
+                "/api/file/chunk" -> WebInbox.CHUNK + 4096
+                "/api/file/begin" -> 16 * 1024
+                else -> MAX_SEALED
+            }
+            if (path.startsWith("/api/file/")) {
+                sock.soTimeout = 120_000
+            }
+            if (len < 0 || len > cap) {
                 writeText(sock.getOutputStream(), 413, "too big")
                 return
             }
@@ -387,8 +433,13 @@ object WebHost {
         when (path) {
             "/", "/index.html" -> staticFile(out, method, "webbridge/index.html", "text/html; charset=utf-8")
             "/bridge.js" -> staticFile(out, method, "webbridge/bridge.js", "text/javascript; charset=utf-8")
+            "/ca.crt" -> caCert(out, method, query, headers)
             "/api/meta" -> meta(out, method, query, headers)
             "/api/send" -> send(out, method, query, headers, body)
+            "/api/file/begin" -> fileBegin(out, method, query, headers, body)
+            "/api/file/chunk" -> fileChunk(out, method, query, headers, body)
+            "/api/file/finish" -> fileFinish(out, method, query, headers)
+            "/api/file/cancel" -> fileCancel(out, method, query, headers)
             "/api/out/list" -> outList(out, method, query, headers)
             "/api/out/chunk" -> outChunk(out, method, query, headers)
             "/api/out/drop" -> outDrop(out, method, query, headers)
@@ -428,12 +479,44 @@ object WebHost {
             return
         }
         val ver = appVersion()
-        val json = if (way == 'A') {
-            "{\"v\":1,\"mode\":\"A\",\"encrypt\":false,\"pageVersion\":\"1\",\"app\":\"$ver\",\"host\":\"手机\",\"warning\":\"${WARN.replace("\"", "\\\"")}\"}"
-        } else {
-            "{\"v\":1,\"mode\":\"B\",\"encrypt\":true,\"pageVersion\":\"1\",\"app\":\"$ver\",\"host\":\"手机\"}"
+        val json = when (way) {
+            'A' -> "{\"v\":1,\"mode\":\"A\",\"encrypt\":false,\"pageVersion\":\"1\",\"app\":\"$ver\",\"host\":\"手机\",\"warning\":\"${WARN.replace("\"", "\\\"")}\"}"
+            'C' -> "{\"v\":1,\"mode\":\"C\",\"encrypt\":true,\"pageVersion\":\"1\",\"app\":\"$ver\",\"host\":\"手机\"}"
+            else -> "{\"v\":1,\"mode\":\"B\",\"encrypt\":true,\"pageVersion\":\"1\",\"app\":\"$ver\",\"host\":\"手机\"}"
         }
         writeBytes(out, 200, "OK", "application/json; charset=utf-8", json.toByteArray(StandardCharsets.UTF_8))
+    }
+
+    /** 只下发根证书。私钥留在手机上。 */
+    private fun caCert(
+        out: OutputStream,
+        method: String,
+        query: Map<String, String>,
+        headers: Map<String, String>
+    ) {
+        if (method != "GET" && method != "HEAD") {
+            writeText(out, 405, "method")
+            return
+        }
+        if (way != 'C' || !authOk(query, headers)) {
+            writeText(out, 404, "not found")
+            return
+        }
+        val body = caPem
+        if (body == null) {
+            writeText(out, 500, "error")
+            return
+        }
+        writeBytes(
+            out,
+            200,
+            "OK",
+            "application/x-x509-ca-cert",
+            if (method == "HEAD") null else body,
+            headOnly = method == "HEAD",
+            length = body.size,
+            disposition = "attachment; filename=\"textsend-ca.crt\""
+        )
     }
 
     private fun outList(out: OutputStream, method: String, query: Map<String, String>, headers: Map<String, String>) {
@@ -510,6 +593,185 @@ object WebHost {
         synchronized(lock) { touched = System.currentTimeMillis() }
         deliver(text)
         writeBytes(out, 204, "No Content", null, null, length = 0)
+    }
+
+    private fun fileBegin(
+        out: OutputStream,
+        method: String,
+        query: Map<String, String>,
+        headers: Map<String, String>,
+        body: ByteArray
+    ) {
+        if (method != "POST") {
+            writeText(out, 405, "method")
+            return
+        }
+        if (!authOk(query, headers)) {
+            writeText(out, 401, "session")
+            return
+        }
+        if (body.isEmpty()) {
+            writeText(out, 400, "body")
+            return
+        }
+        val plain = openUpload(out, body, 16 * 1024) ?: return
+        val id: String
+        val name: String
+        val rel: String
+        val size: Long
+        try {
+            val obj = JsonParser.parseString(String(plain, StandardCharsets.UTF_8)).asJsonObject
+            id = if (obj.has("id")) obj.get("id").asString else ""
+            name = if (obj.has("name")) obj.get("name").asString else ""
+            rel = if (obj.has("rel")) obj.get("rel").asString else ""
+            size = if (obj.has("size")) obj.get("size").asLong else -1
+        } catch (_: Exception) {
+            writeText(out, 400, "json")
+            return
+        }
+        val json = try {
+            WebInbox.begin(id, name, rel, size)
+        } catch (e: IOException) {
+            val m = e.message ?: "begin"
+            if (m == "disk") noteDisk()
+            writeText(out, if (m == "size") 413 else 400, m)
+            return
+        }
+        synchronized(lock) { touched = System.currentTimeMillis() }
+        writeBytes(out, 200, "OK", "application/json; charset=utf-8", json.toByteArray(StandardCharsets.UTF_8))
+    }
+
+    private fun fileChunk(
+        out: OutputStream,
+        method: String,
+        query: Map<String, String>,
+        headers: Map<String, String>,
+        body: ByteArray
+    ) {
+        if (method != "POST") {
+            writeText(out, 405, "method")
+            return
+        }
+        if (!authOk(query, headers)) {
+            writeText(out, 401, "session")
+            return
+        }
+        val id = query["id"]
+        val index = query["i"]?.toIntOrNull()
+        if (index == null) {
+            writeText(out, 400, "index")
+            return
+        }
+        val plain = openUpload(out, body, WebInbox.CHUNK) ?: return
+        try {
+            WebInbox.chunk(id, index, plain)
+        } catch (e: IOException) {
+            val m = e.message ?: "chunk"
+            if (m == "disk") noteDisk()
+            val code = when (m) {
+                "cancelled", "order" -> 409
+                "size" -> 413
+                "missing" -> 404
+                else -> 400
+            }
+            writeText(out, code, m)
+            return
+        }
+        synchronized(lock) { touched = System.currentTimeMillis() }
+        writeBytes(out, 204, "No Content", null, null, length = 0)
+    }
+
+    private fun fileFinish(
+        out: OutputStream,
+        method: String,
+        query: Map<String, String>,
+        headers: Map<String, String>
+    ) {
+        if (method != "POST") {
+            writeText(out, 405, "method")
+            return
+        }
+        if (!authOk(query, headers)) {
+            writeText(out, 401, "session")
+            return
+        }
+        val saved = try {
+            WebInbox.finish(query["id"])
+        } catch (e: IOException) {
+            val m = e.message ?: "finish"
+            if (m == "disk") noteDisk()
+            val code = when (m) {
+                "missing" -> 404
+                "cancelled", "incomplete" -> 409
+                else -> 400
+            }
+            writeText(out, code, m)
+            return
+        }
+        synchronized(lock) { touched = System.currentTimeMillis() }
+        noteSaved(saved.name, saved.scanPath)
+        writeBytes(out, 204, "No Content", null, null, length = 0)
+    }
+
+    private fun fileCancel(
+        out: OutputStream,
+        method: String,
+        query: Map<String, String>,
+        headers: Map<String, String>
+    ) {
+        if (method != "POST") {
+            writeText(out, 405, "method")
+            return
+        }
+        if (!authOk(query, headers)) {
+            writeText(out, 401, "session")
+            return
+        }
+        WebInbox.pause(query["id"])
+        synchronized(lock) { touched = System.currentTimeMillis() }
+        writeBytes(out, 204, "No Content", null, null, length = 0)
+    }
+
+    /** A 档正文就是原文。B 档先解开。超长在这里拒绝，调用方拿到 null 时响应已经写过。 */
+    private fun openUpload(out: OutputStream, body: ByteArray, maxPlain: Int): ByteArray? {
+        if (body.isEmpty()) {
+            writeText(out, 400, "body")
+            return null
+        }
+        val plain = try {
+            if (way == 'A') {
+                body
+            } else {
+                val key = aesKey ?: throw IllegalStateException("no key")
+                AesGcm.open(key, body)
+            }
+        } catch (_: Exception) {
+            writeText(out, 400, "seal")
+            return null
+        }
+        if (plain.size > maxPlain) {
+            writeText(out, 413, "size")
+            return null
+        }
+        return plain
+    }
+
+    private fun noteSaved(name: String, scanPath: String?) {
+        val ctx = app ?: return
+        val kind = if (FileNames.isImageName(name)) "图片" else "文件"
+        main.post {
+            Toast.makeText(ctx, "网页发来$kind $name，已存到下载/TextSend", Toast.LENGTH_SHORT).show()
+            if (scanPath != null) {
+                MediaScannerConnection.scanFile(ctx, arrayOf(scanPath), null, null)
+            }
+        }
+    }
+
+    private fun noteDisk() {
+        val ctx = app ?: return
+        main.post {
+            Toast.makeText(ctx, "存不到下载/TextSend", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun events(sock: Socket, method: String, query: Map<String, String>, headers: Map<String, String>) {
@@ -750,12 +1012,16 @@ object WebHost {
         body: ByteArray?,
         headOnly: Boolean = false,
         length: Int = body?.size ?: 0,
-        cache: String = "no-store"
+        cache: String = "no-store",
+        disposition: String? = null
     ) {
         val sb = StringBuilder()
         sb.append("HTTP/1.1 ").append(code).append(' ').append(reason).append("\r\n")
         if (type != null) {
             sb.append("Content-Type: ").append(type).append("\r\n")
+        }
+        if (disposition != null) {
+            sb.append("Content-Disposition: ").append(disposition).append("\r\n")
         }
         sb.append("Cache-Control: ").append(cache).append("\r\n")
         sb.append("X-Content-Type-Options: nosniff\r\n")
@@ -776,6 +1042,7 @@ object WebHost {
             401 -> "Unauthorized"
             404 -> "Not Found"
             405 -> "Method Not Allowed"
+            409 -> "Conflict"
             413 -> "Payload Too Large"
             429 -> "Too Many Requests"
             else -> "Error"

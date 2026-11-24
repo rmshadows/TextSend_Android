@@ -29,6 +29,7 @@ import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
+import androidx.core.content.FileProvider
 import androidx.core.content.res.ResourcesCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
@@ -863,15 +864,17 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                 button.strokeColor = ColorStateList.valueOf(primary)
             }
         }
+        val caBtn = MaterialButton(ctx)
         fun paintWays() {
             paintWay(wayA, webWay == 'A')
             paintWay(wayB, webWay == 'B')
             paintWay(wayC, webWay == 'C')
             hint.text = when (webWay) {
                 'A' -> "明文，靠扫码令牌。不要传密码。"
-                'C' -> "HTTPS。这一档还没接到手机。"
+                'C' -> "HTTPS，正文仍加密。根证书可选，不装时浏览器会提示不受信任。"
                 else -> "正文加密。三档同时只开一个。"
             }
+            caBtn.visibility = if (webWay == 'C') View.VISIBLE else View.GONE
         }
         fun chip(view: MaterialButton, label: String, mark: Char) {
             view.text = label
@@ -935,6 +938,42 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
             }
             refresh()
         }
+        caBtn.text = "根证书"
+        caBtn.isAllCaps = false
+        caBtn.cornerRadius = (10 * density).toInt()
+        caBtn.layoutParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, btnH
+        ).apply { topMargin = gap }
+        caBtn.backgroundTintList = ColorStateList.valueOf(Color.TRANSPARENT)
+        caBtn.setTextColor(primary)
+        caBtn.strokeWidth = (1.5f * density).toInt().coerceAtLeast(2)
+        caBtn.strokeColor = ColorStateList.valueOf(primary)
+        caBtn.setOnClickListener {
+            if (!WebHost.isRunning() || WebHost.currentWay() != 'C') {
+                Toast.makeText(ctx, "先用 C 档启动", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val file = WebHost.caCertFile()
+            if (file == null || !file.isFile) {
+                Toast.makeText(ctx, "还没有根证书", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            try {
+                val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.files", file)
+                val share = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/x-x509-ca-cert"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    putExtra(Intent.EXTRA_SUBJECT, "textsend-ca.crt")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                ctx.startActivity(Intent.createChooser(share, "根证书"))
+            } catch (_: Exception) {
+                val cm = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("ca", file.absolutePath))
+                Toast.makeText(ctx, "已复制根证书路径", Toast.LENGTH_SHORT).show()
+            }
+        }
+        paintWays()
         linkBtn.text = "复制链接"
         linkBtn.isAllCaps = false
         linkBtn.cornerRadius = (10 * density).toInt()
@@ -1038,6 +1077,7 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         box.addView(hint)
         box.addView(port)
         box.addView(power)
+        box.addView(caBtn)
         box.addView(state)
         box.addView(linkBtn)
         box.addView(linkHint)

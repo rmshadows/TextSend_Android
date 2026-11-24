@@ -9,4 +9,7 @@
     <files-path
         name="int_inbox"
         path="TextSend" />
+    <files-path
+        name="lan_ca"
+        path="textsend-ca" />
 </paths>
