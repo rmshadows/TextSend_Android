@@ -36,7 +36,7 @@
     <string name="messager_file_btn">图片</string>
     <string name="messager_file_long">文件</string>
     <string name="messager_file_hint">短按选图片。按住变成「文件」后，手指还在按钮上松开才进入；滑出按钮即取消</string>
-    <string name="about_help">&lt;b&gt;按钮&lt;/b&gt;&lt;br/&gt;「图片」短按打开相册。按住时字和颜色变成「文件」，手指还在按钮上松开才打开文件管理器，滑出即取消。选完只进待发。&lt;br/&gt;「发送」才真正传出去：有待发就发文件，否则发输入框里的文字。按住「发送」变成「文件夹」，手指还在按钮上松开才进入，滑出即取消。&lt;br/&gt;「取消」只停这一轮，待发还在。&lt;br/&gt;「清空」拿掉待发，不删已经收到的文件。&lt;br/&gt;服务端「启动服务」开始等人连；「在线」里对待授权先对核对码，再点允许 / 拒绝 / 拉黑。已连接可踢下线。按钮下面写着外接键盘的字母，不用长按。&lt;br/&gt;客户端「粘贴 ts://」填连接串，「连接」开始连。探测开着时，点列表里的设备会请求授权。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件&lt;/b&gt;&lt;br/&gt;短按「图片」打开相册。按住时字和颜色变成「文件」，手指还在按钮上松开才打开文件管理器，滑出即取消。选完先进待发，点「发送」才传。大于 16MB 不拷缓存。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件夹&lt;/b&gt;&lt;br/&gt;按住「发送」变成「文件夹」，手指还在按钮上松开才进入，滑出即取消。左边打勾可选多个。也可从文件管理器直接分享文件夹。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;接收&lt;/b&gt;&lt;br/&gt;文件在 下载/TextSend。图片也存文件，不进剪贴板。电脑发来的文件夹会按路径重建。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;取消和续传&lt;/b&gt;&lt;br/&gt;取消只停这一轮，待发还在。再发送会续上对面留下的半截。本地点取消「接收」会删半截。连续取消接收 3 次，冷却 10 秒。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;连不上&lt;/b&gt;&lt;br/&gt;先开飞行模式再开 Wi‑Fi，关掉网络加速/双通道。同一 Wi‑Fi，不要开 VPN。已连接时切到后台再分享，会回到当前会话。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;局域网探测与授权&lt;/b&gt;&lt;br/&gt;设置里默认关。打开后可发现同一局域网里正在开服的 TextSend。客户端点设备会请求临时授权（TSA1），两边显示同一串核对码，对得上再允许；可拒绝、拉黑、踢下线。连接和探测默认都用 54300：连接是 TCP，发现设备是 UDP。防火墙如果只放了 TCP，还要放行 UDP 54300，否则手机发过去的探测进不来。有连接时默认停止探测。不广播 PIN。</string>
+    <string name="about_help">&lt;b&gt;按钮&lt;/b&gt;&lt;br/&gt;「图片」短按打开相册。按住时字和颜色变成「文件」，手指还在按钮上松开才打开文件管理器，滑出即取消。选完只进待发。&lt;br/&gt;「发送」才真正传出去：有待发就发文件，否则发输入框里的文字。按住「发送」变成「文件夹」，手指还在按钮上松开才进入，滑出即取消。&lt;br/&gt;「取消」只停这一轮，待发还在。&lt;br/&gt;「清空」拿掉待发，不删已经收到的文件。&lt;br/&gt;服务端「启动服务」开始等人连；「发到」可选只发 App / 只发兼容 / 发给所有（只发 App 绝不进网页）。「在线」里对待授权先对核对码，再点允许 / 拒绝 / 拉黑；浏览器也可拉黑（进网页黑名单）。设置里有兼容与 App 互斥。已连接可踢下线。按钮下面写着外接键盘的字母，不用长按。&lt;br/&gt;客户端「粘贴 ts://」填连接串，「连接」开始连。探测开着时，点列表里的设备会请求授权。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件&lt;/b&gt;&lt;br/&gt;短按「图片」打开相册。按住时字和颜色变成「文件」，手指还在按钮上松开才打开文件管理器，滑出即取消。选完先进待发，点「发送」才传。大于 16MB 不拷缓存。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;发文件夹&lt;/b&gt;&lt;br/&gt;按住「发送」变成「文件夹」，手指还在按钮上松开才进入，滑出即取消。左边打勾可选多个。也可从文件管理器直接分享文件夹。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;接收&lt;/b&gt;&lt;br/&gt;文件在 下载/TextSend。图片也存文件，不进剪贴板。电脑发来的文件夹会按路径重建。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;取消和续传&lt;/b&gt;&lt;br/&gt;取消只停这一轮，待发还在。再发送会续上对面留下的半截。本地点取消「接收」会删半截。连续取消接收 3 次，冷却 10 秒。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;连不上&lt;/b&gt;&lt;br/&gt;先开飞行模式再开 Wi‑Fi，关掉网络加速/双通道。同一 Wi‑Fi，不要开 VPN。已连接时切到后台再分享，会回到当前会话。&lt;br/&gt;&lt;br/&gt;&lt;b&gt;局域网探测与授权&lt;/b&gt;&lt;br/&gt;设置里默认关。打开后可发现同一局域网里正在开服的 TextSend。客户端点设备会请求临时授权（TSA1），两边显示同一串核对码，对得上再允许；可拒绝、拉黑、踢下线。连接和探测默认都用 54300：连接是 TCP，发现设备是 UDP。防火墙如果只放了 TCP，还要放行 UDP 54300，否则手机发过去的探测进不来。有连接时默认停止探测。不广播 PIN。</string>
     <string name="messager_cancel_btn">取消</string>
     <string name="messager_pending_title">待发 %d（点发送才传）</string>
     <string name="messager_pending_remove">从待发列表移除</string>
@@ -93,6 +93,20 @@
     <string name="settings_auth_blacklist_hint">点条目可编辑，点 × 整条删除。支持 IPv4/IPv6。也可在待授权里点「拉黑」。名单内请求静默拒绝。</string>
     <string name="settings_auth_blacklist_empty">（空）</string>
     <string name="settings_auth_blacklist_delete">删除</string>
+    <string name="settings_web_exclusive">兼容模式与 App 互斥</string>
+    <string name="settings_web_exclusive_hint">默认关。开着时：开网页会停 App 服务，开 App 会停网页；保存设置时若两边都在跑会关掉兼容模式。</string>
+    <string name="settings_web_blacklist">兼容模式网页黑名单</string>
+    <string name="settings_web_blacklist_hint">和授权黑名单分开。名单内访问返回 403 并踢掉长连接。也可在「在线」里对浏览器点「拉黑」。</string>
+    <string name="server_send_target">发到</string>
+    <string name="server_send_target_hint">默认发给所有。只发 App：绝不进网页（无客户端则提示）。只发兼容：只给网页。</string>
+    <string-array name="server_send_target_options">
+        <item>只发 App</item>
+        <item>只发兼容</item>
+        <item>发给所有</item>
+    </string-array>
+    <string name="server_exclusive_stopped_web">已互斥：关掉了兼容模式</string>
+    <string name="server_exclusive_stopped_app">已互斥：关掉了 App 服务</string>
+    <string name="server_web_keys_line">外接键盘：K 踢下线 · B 拉黑（进网页黑名单）</string>
     <string name="client_lan_peers">局域网设备（点一下请求授权）</string>
     <string name="client_lan_scanning">正在探测…还没看到其他 TextSend</string>
     <string name="client_lan_manual_idle">手动探测：点右侧「探测」扫一轮</string>
@@ -164,7 +178,7 @@
     <string name="settings_inbox_no_preview">无法在应用内预览\n%1$s\n%2$s\n可点右上角用其他应用打开</string>
     <string name="settings_help">帮助</string>
     <string name="settings_reset">恢复默认设置</string>
-    <string name="settings_reset_confirm">主题、保活、扫码自动连接、记住的连接、探测、授权和固定 PIN 都会回到默认。发送缓存和已收文件不动。</string>
+    <string name="settings_reset_confirm">主题、保活、扫码自动连接、记住的连接、探测、授权、发到/互斥/网页黑名单和固定 PIN 都会回到默认。发送缓存和已收文件不动。</string>
     <string name="settings_reset_done">已恢复默认设置</string>
     <string name="keepalive_channel">连接保活</string>
     <string name="keepalive_notification">正在保持连接</string>

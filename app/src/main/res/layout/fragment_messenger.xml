@@ -10,28 +10,15 @@
     android:paddingEnd="@dimen/ts_page_pad"
     android:paddingBottom="8dp">
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/sessionButton"
-        style="@style/Widget.Textsend.Button.Outlined"
-        android:layout_width="0dp"
-        android:layout_height="@dimen/ts_btn"
-        android:text="@string/server_session_idle"
-        android:visibility="gone"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:visibility="visible" />
-
+    <!-- 主操作：图片/文件 + 发送（键盘弹起时仍在上方） -->
     <LinearLayout
         android:id="@+id/rowButtons"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
         android:orientation="horizontal"
-        app:layout_constraintBottom_toTopOf="@+id/textView"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/fileBar">
+        app:layout_constraintTop_toTopOf="parent">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/buttonFile"
@@ -54,6 +41,59 @@
             android:text="@string/messager_send_btn" />
     </LinearLayout>
 
+    <!-- 服务端次要一行：发到 + 在线，不抢主按钮空间 -->
+    <LinearLayout
+        android:id="@+id/rowMeta"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/rowButtons"
+        tools:visibility="visible">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingEnd="6dp"
+            android:text="@string/server_send_target"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?android:attr/textColorSecondary" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/sendTargetBtn"
+            style="@style/Widget.Textsend.Button.Text"
+            android:layout_width="0dp"
+            android:layout_height="36dp"
+            android:layout_weight="1"
+            android:gravity="start|center_vertical"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            tools:text="发给所有 ▾" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/sessionButton"
+            style="@style/Widget.Textsend.Button.Text"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:layout_marginStart="2dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="4dp"
+            android:text="@string/server_session_idle"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            tools:text="在线 1" />
+    </LinearLayout>
+
     <EditText
         android:id="@+id/editText"
         android:layout_width="0dp"
@@ -74,7 +114,7 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintHeight_min="88dp"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/sessionButton"
+        app:layout_constraintTop_toBottomOf="@+id/rowMeta"
         tools:ignore="SpeakableTextPresentCheck" />
 
     <LinearLayout
@@ -144,7 +184,7 @@
         android:paddingEnd="12dp"
         android:paddingBottom="4dp"
         android:visibility="gone"
-        app:layout_constraintBottom_toTopOf="@+id/rowButtons"
+        app:layout_constraintBottom_toTopOf="@+id/textView"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/pendingBox"
@@ -204,6 +244,6 @@
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/rowButtons" />
+        app:layout_constraintTop_toBottomOf="@+id/fileBar" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

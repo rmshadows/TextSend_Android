@@ -10,6 +10,8 @@ import cn.rmshadows.textsend.LanAuthGate
 import cn.rmshadows.textsend.LanDiscover
 import cn.rmshadows.textsend.PinSettings
 import cn.rmshadows.textsend.KeepAlive
+import cn.rmshadows.textsend.SendPrefs
+import cn.rmshadows.textsend.WebHost
 import protocol.PairingMaterial
 import protocol.TsServer
 import java.net.InetAddress
@@ -138,12 +140,16 @@ class ServerFragmentViewModel : ViewModel() {
         return raw.startsWith("fe80", ignoreCase = true) || raw.startsWith("169.254")
     }
 
-    fun startServer(tsviewModel: TextsendViewModel, viewModel: ServerFragmentViewModel) {
+    fun startServer(tsviewModel: TextsendViewModel, viewModel: ServerFragmentViewModel): Boolean {
         val portText = uiState.value.serverListenPort.trim()
         val port = portText.toIntOrNull()
         if (port == null || port !in 1..65535) {
             update(null, null, null, false, null, 0, "", "", "端口无效（1–65535）")
-            return
+            return false
+        }
+        val stoppedWeb = SendPrefs.isWebAppExclusive() && WebHost.isRunning()
+        if (stoppedWeb) {
+            WebHost.stop()
         }
         LanDiscover.setConnectPort(port)
         serverGen++
@@ -187,6 +193,7 @@ class ServerFragmentViewModel : ViewModel() {
             }
         }
         worker.start()
+        return stoppedWeb
     }
 
     fun stopServer(tsviewModel: TextsendViewModel, viewModel: ServerFragmentViewModel) {

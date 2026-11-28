@@ -75,6 +75,88 @@
             android:text="@string/server_session_idle"
             tools:visibility="visible" />
 
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense.ExposedDropdownMenu"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:hint="@string/server_send_target"
+            app:boxCornerRadiusBottomEnd="10dp"
+            app:boxCornerRadiusBottomStart="10dp"
+            app:boxCornerRadiusTopEnd="10dp"
+            app:boxCornerRadiusTopStart="10dp"
+            app:endIconMode="dropdown_menu">
+
+            <AutoCompleteTextView
+                android:id="@+id/sendTargetSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:completionThreshold="100"
+                android:importantForAutofill="no"
+                android:inputType="none"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/server_send_target_hint"
+            android:textAppearance="@style/TextAppearance.Textsend.Hint" />
+
+        <LinearLayout
+            android:id="@+id/webFileBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:visibility="gone"
+            tools:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/webFileName"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="middle"
+                    android:singleLine="true"
+                    android:textAppearance="?attr/textAppearanceBodyMedium"
+                    tools:text="photo.jpg" />
+
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/webFileProgress"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:max="1000"
+                    app:trackCornerRadius="99dp" />
+
+                <TextView
+                    android:id="@+id/webFileMeta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    tools:text="收  42%" />
+            </LinearLayout>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/webFileCancel"
+                style="@style/Widget.Textsend.Button.Outlined"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/ts_btn"
+                android:layout_marginStart="8dp"
+                android:text="@string/messager_cancel_btn" />
+        </LinearLayout>
+
         <LinearLayout
             android:id="@+id/authPendingBox"
             android:layout_width="match_parent"

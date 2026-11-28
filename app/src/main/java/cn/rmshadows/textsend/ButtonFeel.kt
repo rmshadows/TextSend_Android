@@ -25,6 +25,10 @@ object ButtonFeel {
         if (view.getTag(R.id.tag_btn_feel) == true) {
             return
         }
+        // 消息页等已绑按住手势的按钮只有一个 OnTouchListener 槽，不能再盖
+        if (view.getTag(R.id.tag_btn_hold) == true) {
+            return
+        }
         view.setTag(R.id.tag_btn_feel, true)
         view.setOnTouchListener { v, event ->
             if (event.actionMasked == MotionEvent.ACTION_DOWN && v.isEnabled) {

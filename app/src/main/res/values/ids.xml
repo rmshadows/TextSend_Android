@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <item name="tag_btn_feel" type="id" />
+    <!-- 自带按住手势的按钮：ButtonFeel 不得再 setOnTouchListener，否则会盖掉长按 -->
+    <item name="tag_btn_hold" type="id" />
 </resources>

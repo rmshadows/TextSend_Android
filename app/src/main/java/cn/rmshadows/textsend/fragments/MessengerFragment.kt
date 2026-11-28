@@ -9,9 +9,12 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.util.TypedValue
+import android.view.HapticFeedbackConstants
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -36,7 +39,9 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import cn.rmshadows.textsend.FileTransfer
 import cn.rmshadows.textsend.LanAuthGate
+import cn.rmshadows.textsend.SendPrefs
 import cn.rmshadows.textsend.WebHost
+import cn.rmshadows.textsend.WebInbox
 import cn.rmshadows.textsend.FolderPickActivity
 import cn.rmshadows.textsend.GalleryPickActivity
 import cn.rmshadows.textsend.KeepAlive
@@ -176,6 +181,19 @@ class MessengerFragment : Fragment() {
                 }
             }
         }
+        viewLifecycleOwner.lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                LanAuthGate.snap.collect {
+                    if (_binding == null) {
+                        return@collect
+                    }
+                    refreshPeopleButton()
+                    if (peopleDialog?.isShowing == true) {
+                        fillPeople()
+                    }
+                }
+            }
+        }
         return binding.root
     }
 
@@ -203,6 +221,7 @@ class MessengerFragment : Fragment() {
         }
 
         binding.sessionButton.setOnClickListener { showPeople() }
+        bindSendTargetSpinner()
         refreshPeopleButton()
 
         binding.buttonSend.setOnClickListener {
@@ -223,22 +242,33 @@ class MessengerFragment : Fragment() {
             Thread({
                 try {
                     if (serverMode) {
-                        val n = TsServer.sendToAllCurrent(text)
-                        if (n > 0) {
-                            uiSendDone(true, text, null)
+                        val route = SendPrefs.routeSend()
+                        if (route.block != null) {
+                            uiSendDone(false, text, route.block)
                             return@Thread
                         }
-                        val web = if (WebHost.hasSession()) WebHost.pushText(text) else 0
-                        if (web == 1) {
+                        var delivered = 0
+                        if (route.app) {
+                            val n = TsServer.sendToAllCurrent(text)
+                            if (n > 0) {
+                                delivered += n
+                            }
+                        }
+                        if (route.web) {
+                            val web = WebHost.pushText(text)
+                            when {
+                                web == 1 -> delivered++
+                                web == -1 && delivered == 0 -> {
+                                    uiSendDone(false, text, "文字超过 64KB")
+                                    return@Thread
+                                }
+                            }
+                        }
+                        if (delivered > 0) {
                             uiSendDone(true, text, null)
-                            return@Thread
+                        } else {
+                            uiSendDone(false, text, route.block ?: "没有已连接的客户端")
                         }
-                        val fail = when {
-                            web == -1 -> "文字超过 64KB"
-                            n < 0 && !WebHost.isRunning() -> "服务未运行"
-                            else -> "没有已连接的客户端"
-                        }
-                        uiSendDone(false, text, fail)
                         return@Thread
                     } else {
                         val peer = TsClient.peer
@@ -279,6 +309,7 @@ class MessengerFragment : Fragment() {
             cancelling.set(true)
             TsClient.peer?.cancelFile()
             TsServer.cancelFilesCurrent()
+            WebInbox.abortActive()
             if (fileLoopRunning) {
                 _binding?.filePercent?.text = "取消中"
                 _binding?.fileMeta?.text = "正在停止…"
@@ -327,12 +358,19 @@ class MessengerFragment : Fragment() {
             button.setTextColor(textColor)
         }
         holdArms.add(button to arm)
+        // 占住 touch 槽，并打标防止 ButtonFeel 布局回调再盖掉长按
+        button.setTag(R.id.tag_btn_hold, true)
+        button.setTag(R.id.tag_btn_feel, true)
         button.setOnTouchListener { _, e ->
             when (e.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     tracking = true
                     armed = false
                     button.isPressed = true
+                    button.performHapticFeedback(
+                        HapticFeedbackConstants.KEYBOARD_TAP,
+                        HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING
+                    )
                     button.removeCallbacks(arm)
                     button.postDelayed(arm, ViewConfiguration.getLongPressTimeout().toLong())
                     true
@@ -693,30 +731,54 @@ class MessengerFragment : Fragment() {
         }
         val cancelled = java.util.function.BooleanSupplier { cancelSend.get() }
         if (serverMode) {
-            val n = TsServer.sendFileToAllCurrent(
-                item.name, item.size, opener, cancelled, item.treeName, item.relPath, seq, of
-            )
-            if (n > 0) {
-                if (n > 1) {
-                    uiToast("已发给 $n 端：${item.name}")
-                }
-            } else if (WebHost.hasSession()) {
-                val web = WebHost.pushFile(item.name, item.size, item.treeName, item.relPath) {
-                    opener.open()
-                }
-                when (web) {
-                    1 -> {
-                        uiProgress(false, item.name, item.size, item.size, seq, of)
-                        return
+            val route = SendPrefs.routeSend()
+            if (route.block != null) {
+                throw java.io.IOException(route.block)
+            }
+            var sent = 0
+            if (route.app) {
+                try {
+                    val n = TsServer.sendFileToAllCurrent(
+                        item.name, item.size, opener, cancelled, item.treeName, item.relPath, seq, of
+                    )
+                    if (n > 0) {
+                        sent += n
+                        if (n > 1) {
+                            uiToast("已发给 $n 端：${item.name}")
+                        }
+                    } else if (!route.web) {
+                        throw java.io.IOException(
+                            if (n < 0) "服务未运行" else "没有已连接的客户端"
+                        )
                     }
-                    -1 -> throw java.io.IOException("文件超过 20GB")
-                    -2 -> throw java.io.IOException("网页待收已满")
-                    else -> throw java.io.IOException("没有已连接的客户端")
+                } catch (e: Exception) {
+                    if (cancelSend.get() || e.message == "cancelled" || !route.web) {
+                        throw e
+                    }
                 }
-            } else if (n < 0) {
-                throw java.io.IOException("服务未运行")
-            } else {
-                throw java.io.IOException("没有已连接的客户端")
+            }
+            if (route.web) {
+                try {
+                    val web = WebHost.pushFile(item.name, item.size, item.treeName, item.relPath) {
+                        opener.open()
+                    }
+                    when (web) {
+                        1 -> {
+                            sent++
+                            uiProgress(false, item.name, item.size, item.size, seq, of)
+                        }
+                        -1 -> if (sent == 0) throw java.io.IOException("文件超过 20GB")
+                        -2 -> if (sent == 0) throw java.io.IOException("网页待收已满")
+                        else -> if (sent == 0) throw java.io.IOException("兼容模式会话已过期")
+                    }
+                } catch (e: Exception) {
+                    if (sent == 0) {
+                        throw e
+                    }
+                }
+            }
+            if (sent == 0) {
+                throw java.io.IOException(route.block ?: "没有已连接的客户端")
             }
         } else {
             val peer = TsClient.peer
@@ -879,6 +941,7 @@ class MessengerFragment : Fragment() {
             cancelling.set(true)
             TsClient.peer?.cancelFile()
             TsServer.cancelFilesCurrent()
+            WebInbox.abortActive()
         }
         if (!tsviewModel.uiState.value.isServerMode) {
             TsClient.close()
@@ -942,14 +1005,41 @@ class MessengerFragment : Fragment() {
         refreshPeopleButton()
     }
 
+    private fun bindSendTargetSpinner() {
+        paintSendTargetBtn()
+        binding.sendTargetBtn.setOnClickListener { showSendTargetMenu() }
+    }
+
+    private fun paintSendTargetBtn() {
+        val b = _binding ?: return
+        val labels = resources.getStringArray(R.array.server_send_target_options)
+        val idx = SendPrefs.getSendTargetIndex().coerceIn(0, labels.lastIndex)
+        b.sendTargetBtn.text = labels[idx] + " ▾"
+        b.sendTargetBtn.contentDescription = getString(R.string.server_send_target) + " " + labels[idx]
+    }
+
+    private fun showSendTargetMenu() {
+        val labels = resources.getStringArray(R.array.server_send_target_options)
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.server_send_target)
+            .setSingleChoiceItems(labels, SendPrefs.getSendTargetIndex().coerceIn(0, labels.lastIndex)) { d, which ->
+                SendPrefs.setSendTargetIndex(which)
+                paintSendTargetBtn()
+                d.dismiss()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     private fun refreshPeopleButton() {
         val b = _binding ?: return
         val server = tsviewModel.uiState.value.isServerMode
-        b.sessionButton.visibility = if (server) View.VISIBLE else View.GONE
+        b.rowMeta.visibility = if (server) View.VISIBLE else View.GONE
         if (!server) {
             peopleDialog?.dismiss()
             return
         }
+        paintSendTargetBtn()
         val running = TsServer.isRunningCurrent()
         val pending = if (running) LanAuthGate.snap.value.pending.size else 0
         val alive = if (running) TsServer.listAliveClientsCurrent().size else 0
@@ -960,6 +1050,13 @@ class MessengerFragment : Fragment() {
             pending > 0 -> getString(R.string.server_session_pending, pending, online)
             else -> getString(R.string.server_session_online, online)
         }
+        // 有待授权时用主色，文字按钮也能一眼看到
+        val color = if (pending > 0) {
+            MaterialColors.getColor(b.sessionButton, com.google.android.material.R.attr.colorPrimary)
+        } else {
+            MaterialColors.getColor(b.sessionButton, com.google.android.material.R.attr.colorOnSurface)
+        }
+        b.sessionButton.setTextColor(color)
     }
 
     private fun showPeople() {
@@ -997,67 +1094,179 @@ class MessengerFragment : Fragment() {
     private fun fillPeople() {
         val box = peopleBox ?: return
         box.removeAllViews()
+        val density = resources.displayMetrics.density
         val running = TsServer.isRunningCurrent()
         val pending = if (running) LanAuthGate.snap.value.pending else emptyList()
         val alive = if (running) TsServer.listAliveClientsCurrent() else emptyList()
         val web = if (WebHost.isRunning()) WebHost.listenerHosts() else emptyList()
-        box.addView(peopleTitle(getString(R.string.server_auth_pending_title) + "  ${pending.size}"))
+
+        box.addView(peopleSection(getString(R.string.server_auth_pending_title) + "  ${pending.size}"))
         if (pending.isEmpty()) {
-            box.addView(peopleLine(getString(R.string.server_session_no_pending)))
+            box.addView(peopleMuted(getString(R.string.server_session_no_pending)))
         } else {
             for (item in pending) {
-                val row = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
-                row.addView(peopleButton(getString(R.string.server_auth_allow)) {
-                    LanAuthGate.decide(item.host, "allow")
-                })
-                row.addView(peopleButton(getString(R.string.server_auth_deny)) {
-                    LanAuthGate.decide(item.host, "deny")
-                })
-                row.addView(peopleButton(getString(R.string.server_auth_blacklist)) {
-                    LanAuthGate.decide(item.host, "blacklist")
-                })
-                box.addView(peopleLine(item.name.ifBlank { item.host }))
-                box.addView(row)
+                val title = item.name.ifBlank { item.host }
+                val hostLine = if (item.sas.isBlank()) item.host else "${item.host}  ·  核对 ${item.sas}"
+                box.addView(
+                    peopleCard(
+                        title,
+                        if (hostLine == title) "" else hostLine,
+                        listOf(
+                            peopleAction(getString(R.string.server_auth_allow)) {
+                                LanAuthGate.decide(item.host, "allow")
+                            },
+                            peopleAction(getString(R.string.server_auth_deny)) {
+                                LanAuthGate.decide(item.host, "deny")
+                            },
+                            peopleAction(getString(R.string.server_auth_blacklist)) {
+                                LanAuthGate.decide(item.host, "blacklist")
+                            }
+                        )
+                    )
+                )
             }
         }
-        box.addView(peopleTitle(getString(R.string.server_alive_clients_title) + "  ${alive.size + web.size}"))
+
+        box.addView(peopleSection(getString(R.string.server_alive_clients_title) + "  ${alive.size + web.size}"))
         if (alive.isEmpty() && web.isEmpty()) {
-            box.addView(peopleLine(getString(R.string.server_session_no_clients)))
+            box.addView(peopleMuted(getString(R.string.server_session_no_clients)))
         }
         for (c in alive) {
-            box.addView(peopleLine(c.name.ifBlank { c.host }))
-            box.addView(peopleButton(getString(R.string.server_kick), fill = true) {
-                TsServer.kickHostCurrent(c.host)
-                refreshPeopleButton()
-                fillPeople()
-            })
+            val title = c.name.ifBlank { c.host }
+            val host = if (c.name.isBlank()) "" else c.host
+            box.addView(
+                peopleCard(
+                    title,
+                    host,
+                    listOf(
+                        peopleAction(getString(R.string.server_kick)) {
+                            TsServer.kickHostCurrent(c.host)
+                            refreshPeopleButton()
+                            fillPeople()
+                        },
+                        peopleAction(getString(R.string.server_auth_blacklist)) {
+                            LanAuthGate.addBlacklist(c.host)
+                            TsServer.kickHostCurrent(c.host)
+                            Toast.makeText(context, "已拉黑并踢下线 ${c.host}", Toast.LENGTH_SHORT).show()
+                            refreshPeopleButton()
+                            fillPeople()
+                        }
+                    )
+                )
+            )
         }
         web.forEachIndexed { index, host ->
-            box.addView(peopleLine("网页 ${WebHost.currentWay()}  ·  $host"))
-            box.addView(peopleButton(getString(R.string.server_kick), fill = true) {
-                WebHost.dropListener(index, host)
+            box.addView(
+                peopleCard(
+                    "网页 ${WebHost.currentWay()}",
+                    host,
+                    listOf(
+                        peopleAction(getString(R.string.server_kick)) {
+                            WebHost.dropListener(index, host)
+                            refreshPeopleButton()
+                            fillPeople()
+                        },
+                        peopleAction(getString(R.string.server_auth_blacklist)) {
+                            SendPrefs.addWebBlacklist(host)
+                            Toast.makeText(context, "已拉黑并踢下线 $host", Toast.LENGTH_SHORT).show()
+                            refreshPeopleButton()
+                            fillPeople()
+                        }
+                    )
+                )
+            )
+        }
+        if (alive.size + web.size > 1) {
+            val kickAll = peopleAction(getString(R.string.server_kick_all), fill = true) {
+                for (c in TsServer.listAliveClientsCurrent()) {
+                    TsServer.kickHostCurrent(c.host)
+                }
+                WebHost.dropAllListeners()
                 refreshPeopleButton()
                 fillPeople()
+            }
+            (kickAll.layoutParams as LinearLayout.LayoutParams).topMargin = (8 * density).toInt()
+            box.addView(kickAll)
+        }
+    }
+
+    private fun peopleSection(text: String): TextView {
+        val density = resources.displayMetrics.density
+        return TextView(requireContext()).apply {
+            this.text = text
+            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleSmall)
+            setPadding(0, (10 * density).toInt(), 0, 0)
+        }
+    }
+
+    private fun peopleMuted(text: String): TextView {
+        return TextView(requireContext()).apply {
+            this.text = text
+            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodyMedium)
+            alpha = 0.6f
+        }
+    }
+
+    private fun themeColor(attr: Int): Int {
+        val tv = TypedValue()
+        val theme = requireContext().theme
+        if (!theme.resolveAttribute(attr, tv, true)) {
+            return 0xFF888888.toInt()
+        }
+        return if (tv.resourceId != 0) requireContext().getColor(tv.resourceId) else tv.data
+    }
+
+    /** 一台设备一个框：标题 + 操作按钮并排。 */
+    private fun peopleCard(title: String, host: String, buttons: List<MaterialButton>): LinearLayout {
+        val density = resources.displayMetrics.density
+        val fill = themeColor(com.google.android.material.R.attr.colorSurfaceContainerLow)
+        val stroke = themeColor(com.google.android.material.R.attr.colorOutline)
+        val card = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            background = GradientDrawable().apply {
+                setColor(fill)
+                setStroke((1 * density).toInt().coerceAtLeast(1), stroke)
+                cornerRadius = 0f
+            }
+            setPadding((12 * density).toInt(), (10 * density).toInt(), (12 * density).toInt(), (10 * density).toInt())
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (8 * density).toInt() }
+        }
+        card.addView(TextView(requireContext()).apply {
+            text = title.ifBlank { host }
+            setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_TitleSmall)
+        })
+        if (host.isNotBlank() && host != title) {
+            card.addView(TextView(requireContext()).apply {
+                text = host
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_Material3_BodySmall)
+                alpha = 0.7f
+                setPadding(0, (2 * density).toInt(), 0, 0)
             })
         }
-    }
-
-    private fun peopleTitle(text: String): TextView {
-        return TextView(requireContext()).apply {
-            this.text = text
-            setPadding(0, (10 * resources.displayMetrics.density).toInt(), 0, 0)
+        val row = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { topMargin = (10 * density).toInt() }
         }
-    }
-
-    private fun peopleLine(text: String): TextView {
-        return TextView(requireContext()).apply {
-            this.text = text
-            setPadding(0, (6 * resources.displayMetrics.density).toInt(), 0, 0)
+        buttons.forEachIndexed { index, button ->
+            val lp = button.layoutParams as LinearLayout.LayoutParams
+            if (index > 0) {
+                lp.marginStart = (6 * density).toInt()
+            }
+            row.addView(button)
         }
+        card.addView(row)
+        return card
     }
 
-    private fun peopleButton(label: String, fill: Boolean = false, onClick: () -> Unit): MaterialButton {
-        val height = (40 * resources.displayMetrics.density).toInt()
+    private fun peopleAction(label: String, fill: Boolean = false, onClick: () -> Unit): MaterialButton {
+        val density = resources.displayMetrics.density
+        val height = (40 * density).toInt()
         return MaterialButton(
             requireContext(),
             null,
@@ -1065,8 +1274,17 @@ class MessengerFragment : Fragment() {
         ).apply {
             text = label
             isAllCaps = false
+            stateListAnimator = null
+            elevation = 0f
+            shapeAppearanceModel = shapeAppearanceModel.toBuilder().setAllCornerSizes(0f).build()
             cornerRadius = 0
+            insetTop = 0
+            insetBottom = 0
+            minWidth = 0
+            minimumWidth = 0
             minHeight = height
+            setPadding((4 * density).toInt(), 0, (4 * density).toInt(), 0)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             layoutParams = if (fill) {
                 LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, height)
             } else {

@@ -27,10 +27,13 @@ import cn.rmshadows.textsend.PinSettings
 import cn.rmshadows.textsend.KeepAlive
 import cn.rmshadows.textsend.R
 import cn.rmshadows.textsend.ReceiveFolder
+import cn.rmshadows.textsend.SendPrefs
 import cn.rmshadows.textsend.ThemeSettings
+import cn.rmshadows.textsend.WebHost
 import cn.rmshadows.textsend.databinding.FragmentSettingsBinding
 import com.google.android.material.card.MaterialCardView
 import protocol.FileNames
+import protocol.TsServer
 
 class SettingsFragment : Fragment() {
     private var _binding: FragmentSettingsBinding? = null
@@ -39,6 +42,8 @@ class SettingsFragment : Fragment() {
     /** 设置页黑名单草稿；保存时写回。 */
     private val blacklistItems = LinkedHashSet<String>()
     private var blacklistEditing: String? = null
+    private val webBlacklistItems = LinkedHashSet<String>()
+    private var webBlacklistEditing: String? = null
 
     private val notifPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -162,6 +167,27 @@ class SettingsFragment : Fragment() {
                     && event.action == KeyEvent.ACTION_DOWN
             if (actionId == EditorInfo.IME_ACTION_DONE || enter) {
                 commitBlacklistAdd()
+                true
+            } else {
+                false
+            }
+        }
+        binding.webExclusiveSwitch.setOnCheckedChangeListener { _, checked ->
+            if (applying) {
+                return@setOnCheckedChangeListener
+            }
+            val turningOn = checked && !SendPrefs.isWebAppExclusive()
+            SendPrefs.setWebAppExclusive(checked)
+            if (turningOn && TsServer.isRunningCurrent() && WebHost.isRunning()) {
+                WebHost.stop()
+                Toast.makeText(context, R.string.server_exclusive_stopped_web, Toast.LENGTH_SHORT).show()
+            }
+        }
+        binding.webBlacklistAdd.setOnEditorActionListener { _, actionId, event ->
+            val enter = event != null && event.keyCode == KeyEvent.KEYCODE_ENTER
+                    && event.action == KeyEvent.ACTION_DOWN
+            if (actionId == EditorInfo.IME_ACTION_DONE || enter) {
+                commitWebBlacklistAdd()
                 true
             } else {
                 false
@@ -297,6 +323,8 @@ class SettingsFragment : Fragment() {
         binding.authRateInput.setText(LanAuthGate.getRatePerMin().toString())
         binding.authCooldownInput.setText(LanAuthGate.getCooldownSec().toString())
         loadBlacklistDraft()
+        binding.webExclusiveSwitch.isChecked = SendPrefs.isWebAppExclusive()
+        loadWebBlacklistDraft()
         binding.customPinSwitch.isChecked = PinSettings.isEnabled()
         binding.customPinInput.setText(PinSettings.getPin())
         applying = false
@@ -331,11 +359,17 @@ class SettingsFragment : Fragment() {
             .putInt("auth_rate_per_min", 3)
             .putInt("auth_cooldown_sec", 10)
             .putString("auth_blacklist", "")
+            .putString("send_target", "all")
+            .putBoolean("web_app_exclusive", false)
+            .putString("web_blacklist", "")
             .putBoolean("custom_pin_enabled", false)
             .putString("custom_pin", "")
             .commit()
         KeepAlive.setEnabled(false)
         LanDiscover.setEnabled(false)
+        SendPrefs.setSendTarget(SendPrefs.TARGET_ALL)
+        SendPrefs.setWebAppExclusive(false)
+        SendPrefs.setWebBlacklist(emptyList())
         showStoredSettings()
         if (themeWas != ThemeSettings.DEFAULT) {
             applying = true
@@ -458,14 +492,90 @@ class SettingsFragment : Fragment() {
         LanAuthGate.setBlacklist(blacklistItems)
     }
 
-    private fun renderBlacklist() {
+    private fun loadWebBlacklistDraft() {
+        webBlacklistItems.clear()
+        webBlacklistItems.addAll(SendPrefs.getWebBlacklist())
+        webBlacklistEditing = null
+        if (_binding != null) {
+            binding.webBlacklistAdd.setText("")
+        }
+        renderWebBlacklist()
+    }
+
+    private fun commitWebBlacklistAdd() {
         if (_binding == null) {
             return
         }
-        val box = binding.authBlacklistList
+        val next = normalizeBlacklistHost(binding.webBlacklistAdd.text?.toString().orEmpty())
+        if (next.isEmpty()) {
+            webBlacklistEditing = null
+            binding.webBlacklistAdd.setText("")
+            renderWebBlacklist()
+            return
+        }
+        webBlacklistEditing?.let { webBlacklistItems.remove(it) }
+        webBlacklistEditing = null
+        webBlacklistItems.add(next)
+        binding.webBlacklistAdd.setText("")
+        persistWebBlacklistDraft()
+        renderWebBlacklist()
+    }
+
+    private fun startWebBlacklistEdit(host: String) {
+        webBlacklistEditing = host
+        binding.webBlacklistAdd.setText(host)
+        binding.webBlacklistAdd.setSelection(host.length)
+        binding.webBlacklistAdd.requestFocus()
+        renderWebBlacklist()
+    }
+
+    private fun removeWebBlacklistItem(host: String) {
+        webBlacklistItems.remove(host)
+        if (host == webBlacklistEditing) {
+            webBlacklistEditing = null
+            binding.webBlacklistAdd.setText("")
+        }
+        persistWebBlacklistDraft()
+        renderWebBlacklist()
+    }
+
+    private fun persistWebBlacklistDraft() {
+        SendPrefs.setWebBlacklist(webBlacklistItems)
+    }
+
+    private fun renderBlacklist() {
+        renderHostList(
+            binding.authBlacklistList,
+            blacklistItems,
+            blacklistEditing,
+            onEdit = { startBlacklistEdit(it) },
+            onRemove = { removeBlacklistItem(it) }
+        )
+    }
+
+    private fun renderWebBlacklist() {
+        renderHostList(
+            binding.webBlacklistList,
+            webBlacklistItems,
+            webBlacklistEditing,
+            onEdit = { startWebBlacklistEdit(it) },
+            onRemove = { removeWebBlacklistItem(it) }
+        )
+    }
+
+    private fun renderHostList(
+        box: LinearLayout,
+        items: LinkedHashSet<String>,
+        editing: String?,
+        onEdit: (String) -> Unit,
+        onRemove: (String) -> Unit
+    ) {
+        if (_binding == null) {
+            return
+        }
         box.removeAllViews()
         val density = resources.displayMetrics.density
-        val visible = blacklistItems.filter { it != blacklistEditing }
+        val visible = items.filter { it != editing }
         if (visible.isEmpty()) {
             val empty = TextView(requireContext())
             empty.text = getString(R.string.settings_auth_blacklist_empty)
@@ -506,7 +616,7 @@ class SettingsFragment : Fragment() {
                 gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
                 setPadding((10 * density).toInt(), 0, (4 * density).toInt(), 0)
                 layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f)
-                setOnClickListener { startBlacklistEdit(host) }
+                setOnClickListener { onEdit(host) }
             }
             val onSurface = android.util.TypedValue()
             requireContext().theme.resolveAttribute(
@@ -531,7 +641,7 @@ class SettingsFragment : Fragment() {
                     (44 * density).toInt(),
                     LinearLayout.LayoutParams.MATCH_PARENT
                 )
-                setOnClickListener { removeBlacklistItem(host) }
+                setOnClickListener { onRemove(host) }
             }
             row.addView(ipLab)
             row.addView(del)
@@ -551,6 +661,8 @@ class SettingsFragment : Fragment() {
             }
             commitBlacklistAdd()
             persistBlacklistDraft()
+            commitWebBlacklistAdd()
+            persistWebBlacklistDraft()
         }
         super.onDestroyView()
         _binding = null

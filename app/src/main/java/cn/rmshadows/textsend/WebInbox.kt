@@ -35,6 +35,16 @@ object WebInbox {
 
     private val parts = HashMap<String, Part>()
     private var app: Context? = null
+    @Volatile
+    private var watch: Watch? = null
+
+    /** 网页上传进度。UI 线程外回调。 */
+    interface Watch {
+        fun progress(name: String, done: Long, total: Long)
+        fun finished()
+        fun aborted(name: String)
+        fun paused(name: String)
+    }
 
     class Saved(val name: String, val size: Long, val scanPath: String?)
 
@@ -56,6 +66,36 @@ object WebInbox {
 
     fun attach(ctx: Context) {
         app = ctx.applicationContext
+        if (watch == null) {
+            // 默认接到 FileTransfer.callback，Messenger / 服务端页都能刷进度、取消
+            setWatch(object : Watch {
+                override fun progress(name: String, done: Long, total: Long) {
+                    FileTransfer.callback?.onProgress(true, name, done, total, 1, 1)
+                }
+
+                override fun finished() {
+                    FileTransfer.callback?.onReceived("网页文件", FileNames.FOLDER)
+                }
+
+                override fun aborted(name: String) {
+                    FileTransfer.callback?.onReceiveFailed(
+                        if (name.isBlank()) "网页文件" else name,
+                        "已取消"
+                    )
+                }
+
+                override fun paused(name: String) {
+                    FileTransfer.callback?.onReceiveFailed(
+                        if (name.isBlank()) "网页文件" else name,
+                        "已取消"
+                    )
+                }
+            })
+        }
+    }
+
+    fun setWatch(next: Watch?) {
+        watch = next
     }
 
     @Synchronized
@@ -71,6 +111,7 @@ object WebInbox {
         if (existing != null && existing.size == size && backingExists(existing)) {
             existing.aborted = false
             existing.paused = false
+            notifyProgress(existing)
             return json(existing)
         }
         if (existing != null) {
@@ -84,6 +125,7 @@ object WebInbox {
             openFile(id, name ?: "", rel ?: "", size)
         }
         parts[id] = part
+        notifyProgress(part)
         return json(part)
     }
 
@@ -123,18 +165,46 @@ object WebInbox {
             ch.force(false)
             part.forced = part.written
         }
+        notifyProgress(part)
     }
 
     @Synchronized
     fun pause(id: String?) {
+        var name = ""
+        var hit = false
         for (part in parts.values) {
             if (id != null && id.isNotEmpty() && id != part.id) {
                 continue
             }
             if (!part.aborted) {
                 part.paused = true
+                name = label(part)
+                hit = true
             }
         }
+        if (hit) {
+            watch?.paused(name)
+        }
+    }
+
+    /** 本机点取消：中止进行中的网页上传。 */
+    @Synchronized
+    fun abortActive(): Int {
+        var name = ""
+        var n = 0
+        for (part in parts.values) {
+            if (part.aborted) {
+                continue
+            }
+            part.aborted = true
+            closeChannel(part)
+            name = label(part)
+            n++
+        }
+        if (n > 0) {
+            watch?.aborted(name)
+        }
+        return n
     }
 
     @Synchronized
@@ -157,16 +227,41 @@ object WebInbox {
             publishFile(part)
         }
         parts.remove(id)
+        watch?.finished()
         return saved
     }
 
     /** 只清内存登记。半截还在下载目录里，同一 id 再 begin 会接着写。 */
     @Synchronized
     fun release() {
+        var live = false
         for (part in parts.values) {
+            if (!part.aborted) {
+                live = true
+            }
             closeChannel(part)
         }
         parts.clear()
+        if (live) {
+            watch?.finished()
+        }
+    }
+
+    private fun label(part: Part): String {
+        if (part.rel.isNotBlank()) {
+            return part.rel
+        }
+        if (part.name.isNotBlank()) {
+            return part.name
+        }
+        return "文件"
+    }
+
+    private fun notifyProgress(part: Part) {
+        if (part.aborted || part.paused) {
+            return
+        }
+        watch?.progress(label(part), part.written, part.size)
     }
 
     private fun openFile(id: String, name: String, rel: String, size: Long): Part {

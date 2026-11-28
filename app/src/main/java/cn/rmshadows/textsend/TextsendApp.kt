@@ -10,6 +10,7 @@ class TextsendApp : Application() {
         FileNames.init(this)
         KeepAlive.init(this)
         PinSettings.init(this)
+        SendPrefs.init(this)
         ClientConnectionSettings.init(this)
         LanDiscover.init(this)
         LanAuthGate.init(this)

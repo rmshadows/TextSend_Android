@@ -39,16 +39,21 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.fragment.findNavController
 import cn.rmshadows.textsend.ButtonFeel
+import cn.rmshadows.textsend.FileTransfer
+import cn.rmshadows.textsend.FixedListAdapter
 import cn.rmshadows.textsend.LanAuthGate
 import cn.rmshadows.textsend.LanDiscover
 import cn.rmshadows.textsend.R
+import cn.rmshadows.textsend.SendPrefs
 import cn.rmshadows.textsend.WebHost
+import cn.rmshadows.textsend.WebInbox
 import cn.rmshadows.textsend.databinding.FragmentServerBinding
 import cn.rmshadows.textsend.viewmodels.ServerFragmentViewModel
 import cn.rmshadows.textsend.viewmodels.TextsendViewModel
 import com.google.android.material.button.MaterialButton
 import com.king.zxing.util.CodeUtils
 import kotlinx.coroutines.launch
+import protocol.FileIoCallback
 import protocol.TsServer
 import protocol.TsUri
 import java.util.LinkedList
@@ -69,6 +74,56 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
     private var sessionSig = ""
     private var sessionTargets: List<SessionTarget> = emptyList()
     private var sessionCursor = 0
+    private var ownsWebFileIo = false
+
+    /** 仅网页收文件时（还在服务端页）刷进度；进聊天页后由 Messenger 接管。 */
+    private val webFileIo = object : FileIoCallback {
+        override fun onProgress(incoming: Boolean, name: String, done: Long, total: Long, seq: Int, of: Int) {
+            val act = activity ?: return
+            act.runOnUiThread {
+                val b = _binding ?: return@runOnUiThread
+                if (!incoming) {
+                    return@runOnUiThread
+                }
+                b.webFileBar.visibility = View.VISIBLE
+                b.webFileName.text = name
+                val pct = if (total > 0) ((done * 1000L) / total).toInt().coerceIn(0, 1000) else 0
+                b.webFileProgress.progress = pct
+                val shown = if (total > 0) ((done * 100L) / total).toInt().coerceIn(0, 100) else 0
+                b.webFileMeta.text = "收  $shown%"
+            }
+        }
+
+        override fun onReceived(name: String, where: String) {
+            val act = activity ?: return
+            act.runOnUiThread {
+                hideWebFileBar()
+                if (name.isNotBlank()) {
+                    Toast.makeText(context, "已保存 $name", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+
+        override fun onReceiveFailed(name: String, err: String) {
+            val act = activity ?: return
+            act.runOnUiThread {
+                hideWebFileBar()
+                val tip = when {
+                    err.contains("已取消") -> "已取消"
+                    else -> "接收失败 $name: $err"
+                }
+                Toast.makeText(context, tip, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun hideWebFileBar() {
+        val b = _binding ?: return
+        b.webFileBar.visibility = View.GONE
+        b.webFileName.text = ""
+        b.webFileMeta.text = ""
+        b.webFileProgress.progress = 0
+    }
 
     private class SessionTarget(
         val pending: Boolean,
@@ -230,7 +285,26 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                 viewModel.update(sip, null, null, null, null, null)
             }
         }
+        bindSendTargetSpinner()
         return binding.root
+    }
+
+    private fun bindSendTargetSpinner() {
+        val labels = resources.getStringArray(R.array.server_send_target_options).toList()
+        val adapter = FixedListAdapter(requireContext(), R.layout.item_ip_dropdown, labels)
+        binding.sendTargetSpinner.setAdapter(adapter)
+        binding.sendTargetSpinner.keyListener = null
+        binding.sendTargetSpinner.threshold = Int.MAX_VALUE
+        val idx = SendPrefs.getSendTargetIndex().coerceIn(0, labels.lastIndex)
+        binding.sendTargetSpinner.setText(labels[idx], false)
+        binding.sendTargetSpinner.setOnClickListener {
+            binding.sendTargetSpinner.showDropDown()
+        }
+        binding.sendTargetSpinner.setOnItemClickListener { _, _, pos, _ ->
+            if (pos in labels.indices) {
+                SendPrefs.setSendTargetIndex(pos)
+            }
+        }
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
@@ -254,13 +328,21 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         }
 
         binding.webBridgeBtn.setOnClickListener { showWebDialog() }
+        binding.webFileCancel.setOnClickListener {
+            WebInbox.abortActive()
+            hideWebFileBar()
+            Toast.makeText(context, "已取消", Toast.LENGTH_SHORT).show()
+        }
 
         binding.serverStartBtn.setOnClickListener {
             if (viewModel.uiState.value.serverRunning) {
                 // 停止服务
                 viewModel.stopServer(tsviewModel, viewModel)
             } else {
-                viewModel.startServer(tsviewModel, viewModel)
+                val stoppedWeb = viewModel.startServer(tsviewModel, viewModel)
+                if (stoppedWeb) {
+                    Toast.makeText(context, R.string.server_exclusive_stopped_web, Toast.LENGTH_SHORT).show()
+                }
             }
         }
 
@@ -556,10 +638,16 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         return deviceCard(
             "网页 ${WebHost.currentWay()}",
             host,
-            null,
+            getString(R.string.server_web_keys_line),
             listOf(
                 reviewButton(getString(R.string.server_kick), false, "K") {
                     WebHost.dropListener(index, host)
+                    sessionSig = ""
+                    updateSessionButton(true)
+                },
+                reviewButton(getString(R.string.server_auth_blacklist), false, "B") {
+                    SendPrefs.addWebBlacklist(host)
+                    Toast.makeText(context, "已拉黑并踢下线 $host", Toast.LENGTH_SHORT).show()
                     sessionSig = ""
                     updateSessionButton(true)
                 }
@@ -625,7 +713,8 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
             }
             "block" -> {
                 if (target.webIndex >= 0) {
-                    WebHost.dropListener(target.webIndex, target.host)
+                    SendPrefs.addWebBlacklist(target.host)
+                    Toast.makeText(context, "已拉黑并踢下线 ${target.host}", Toast.LENGTH_SHORT).show()
                     sessionSig = ""
                     updateSessionButton(true)
                 } else if (target.pending) {
@@ -930,11 +1019,19 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
                 return@setOnClickListener
             }
             val p = port.text.toString().toIntOrNull() ?: WebHost.DEFAULT_PORT
+            var stoppedApp = false
+            if (SendPrefs.isWebAppExclusive() && viewModel.uiState.value.serverRunning) {
+                viewModel.stopServer(tsviewModel, viewModel)
+                stoppedApp = true
+            }
             val err = WebHost.start(ctx, p, webWay)
             if (err != null) {
                 Toast.makeText(ctx, err, Toast.LENGTH_LONG).show()
             } else {
                 power.text = "停止"
+                if (stoppedApp) {
+                    Toast.makeText(ctx, R.string.server_exclusive_stopped_app, Toast.LENGTH_SHORT).show()
+                }
             }
             refresh()
         }
@@ -1113,8 +1210,28 @@ class ServerFragment : Fragment(), InputPortNumberDialogFragment.OnInputPortRece
         return bitmap
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (FileTransfer.callback == null) {
+            FileTransfer.callback = webFileIo
+            ownsWebFileIo = true
+        }
+    }
+
+    override fun onPause() {
+        if (ownsWebFileIo && FileTransfer.callback === webFileIo) {
+            FileTransfer.callback = null
+            ownsWebFileIo = false
+        }
+        super.onPause()
+    }
+
     override fun onDestroyView() {
         dismissSessionDialog()
+        if (ownsWebFileIo && FileTransfer.callback === webFileIo) {
+            FileTransfer.callback = null
+            ownsWebFileIo = false
+        }
         val dest = runCatching { findNavController().currentDestination?.id }.getOrNull()
         // 进聊天或设置时服务还要留着。左上角返回、系统返回回到客户端时要停。
         val keepRunning = dest == R.id.messengerFragment || dest == R.id.settingsFragment

@@ -370,6 +370,14 @@ object WebHost {
         try {
             sock.tcpNoDelay = true
             sock.soTimeout = 20_000
+            val host = remoteHost(sock)
+            if (SendPrefs.isWebBlacklisted(host)) {
+                try {
+                    writeText(sock.getOutputStream(), 403, "blocked")
+                } catch (_: Exception) {
+                }
+                return
+            }
             val input = sock.getInputStream()
             val header = readHeaders(input) ?: return
             val lines = header.split("\r\n")
@@ -418,6 +426,24 @@ object WebHost {
                 } catch (_: Exception) {
                 }
             }
+        }
+    }
+
+    private fun remoteHost(sock: Socket): String {
+        val addr = sock.inetAddress?.hostAddress ?: return ""
+        return SendPrefs.normalizeHost(addr)
+    }
+
+    /** 踢掉已在网页黑名单里的长连接。 */
+    fun dropBlacklisted() {
+        val gone = clients.filter { SendPrefs.isWebBlacklisted(it.host) }
+        for (c in gone) {
+            c.write(sse("bye", "blocked"))
+            c.close()
+            clients.remove(c)
+        }
+        if (gone.isNotEmpty()) {
+            notifyChanged()
         }
     }
 
@@ -796,7 +822,7 @@ object WebHost {
             "Cache-Control: no-store\r\nConnection: keep-alive\r\n\r\nretry: 2000\r\n\r\n"
         out.write(head.toByteArray(StandardCharsets.ISO_8859_1))
         out.flush()
-        val host = sock.inetAddress?.hostAddress ?: "未知"
+        val host = remoteHost(sock).ifBlank { "未知" }
         val sse = Sse(sock, out, host)
         val backlog = synchronized(lock) {
             touched = System.currentTimeMillis()
